@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aula Virtual · Herramientas Informáticas</title>
+<!-- Sin sesión iniciada, esta página te manda a acceso.html -->
+<script src="access/access.js" data-proteger data-sin-barra></script>
+<link rel="stylesheet" href="access/estilo.css">
+<style>
+  .hero { margin-bottom: 8px; }
+  .unidad { margin-top: 38px; }
+  .unidad-h { display: flex; align-items: baseline; gap: 12px; margin: 0 0 4px; }
+  .unidad-h h2 { font-size: 1.35rem; letter-spacing: -.01em; margin: 0; }
+  .unidad-h .linea { flex: 1; border-top: 1px solid var(--line); transform: translateY(-4px); }
+  .sub-h { font-family: var(--mono); font-size: .72rem; color: var(--mut); text-transform: uppercase; letter-spacing: .6px; margin: 20px 0 10px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+  a.sesion {
+    --acc: var(--moss); --acc-d: var(--moss-d); --acc-bg: var(--moss-bg);
+    position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 22px;
+    text-decoration: none; color: var(--ink);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px;
+    overflow: hidden; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  }
+  a.sesion.ec { --acc: var(--amber); --acc-d: var(--amber-d); --acc-bg: var(--amber-bg); }
+  a.sesion::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--acc); }
+  a.sesion:hover { transform: translateY(-3px); border-color: var(--acc); box-shadow: 0 12px 28px rgba(16, 35, 28, .10); }
+  a.sesion:focus-visible { outline: 3px solid rgba(53, 81, 63, .3); outline-offset: 2px; }
+  .s-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .s-tipo { font-family: var(--mono); font-size: .68rem; font-weight: 600; letter-spacing: .6px; color: var(--acc-d); background: var(--acc-bg); border-radius: 6px; padding: 3px 8px; }
+  .s-id { font-family: var(--mono); font-size: .7rem; color: var(--mut); }
+  .s-num { font-family: var(--mono); font-size: 2.4rem; font-weight: 600; line-height: 1; letter-spacing: -.03em; }
+  .s-num small { display: block; font-family: var(--sans); font-size: .85rem; font-weight: 500; letter-spacing: 0; color: var(--ink-2); margin-top: 6px; }
+  .s-go { display: flex; align-items: center; justify-content: space-between; font-size: .85rem; font-weight: 600; color: var(--acc-d); }
+  .s-go svg { width: 18px; height: 18px; transition: transform .18s; }
+  a.sesion:hover .s-go svg { transform: translateX(4px); }
+
+  .skeleton { height: 150px; border-radius: 14px; background: linear-gradient(100deg, #ece8dc 30%, #f6f4ee 50%, #ece8dc 70%); background-size: 200% 100%; animation: brillo 1.2s linear infinite; }
+  @keyframes brillo { to { background-position: -200% 0; } }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-in">
+      <div class="plate">
+        <span class="plate-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 20.5 7.2v9.6L12 21.5 3.5 16.8V7.2z"/><path d="M12 12 3.8 7.4M12 12l8.2-4.6M12 12v9.2"/></svg></span>
+        <span class="plate-txt"><b>Aula Virtual</b><small>Herramientas Informáticas</small></span>
+      </div>
+      <div class="who-chip">
+        <i class="dot"></i><span id="quien"></span>
+        <button class="btn ghost sm" id="salir" type="button">Salir</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="hero anim">
+      <p class="eyebrow" id="saludoRol">Portal</p>
+      <h1 class="titulo" id="saludo">Hola</h1>
+      <p class="lede" id="lede">Elige tu clase o evaluación para ir directo a tu documento.</p>
+    </section>
+    <div id="contenido"><div class="grid"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div></div>
+  </main>
+
+  <script>
+    /* ==========================================================
+       PORTAL: crea un botón por cada sesión que exista. No hay lista que mantener.
+
+       Para publicar algo nuevo solo sube el CSV con el nombre correcto:
+         clases/class#u#.csv     -> clase # de la unidad #     (class4u1.csv, class2u2.csv ...)
+         eecc/ec#u#.csv          -> evaluación continua        (ec1u1.csv, ec2u1.csv ...)
+       El botón aparece solo. Al presionarlo se abre access/sesion.html?s=<sesión>:
+         alumno  -> pasa directo a SU enlace
+         docente -> ve la lista de alumnos con sus enlaces
+       (clases/class1u1.html es la única clase que es una página: no lleva CSV.)
+
+       Búsqueda automática: por cada unidad y tipo se prueban los números 1, 2, 3...
+       y se detiene tras HUECOS números seguidos que no existen.
+       ========================================================== */
+    const UNIDADES = [1, 2, 3, 4];   // cuántas unidades se buscan
+    const HUECOS = 3;                // se tolera faltar hasta 3 números seguidos (class5 sin class6, class7 y class8 => fin)
+    const TOPE = 40;                 // límite de seguridad por unidad y tipo
+
+    const ICONO_FLECHA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
+
+    function el(tag, cls, text) {
+      const n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (text !== undefined) n.textContent = text;
+      return n;
+    }
+
+    async function existe(info) {
+      const [csv, html] = await Promise.all([
+        Acceso.textoCSV(info.carpeta + info.id + ".csv"),
+        info.tipo === "class" ? Acceso.existeHTML(info.id) : false
+      ]);
+      return !!(csv || html);
+    }
+
+    async function sondear(tipo, unidad) {
+      const halladas = [];
+      let falta = 0;
+      for (let n = 1; n <= TOPE && falta < HUECOS; n++) {
+        const info = Acceso.idSesion(`${tipo}${n}u${unidad}`);
+        if (await existe(info)) { halladas.push(info); falta = 0; } else falta++;
+      }
+      return halladas;
+    }
+
+    async function detectar() {
+      const tareas = [];
+      for (const u of UNIDADES) for (const tipo of ["class", "ec"]) tareas.push(sondear(tipo, u));
+      return (await Promise.all(tareas)).flat();
+    }
+
+    function tarjeta(info) {
+      const a = el("a", "sesion" + (info.tipo === "ec" ? " ec" : ""));
+      a.href = "access/sesion.html?s=" + encodeURIComponent(info.id);
+      const top = el("div", "s-top");
+      top.append(el("span", "s-tipo", info.tipo === "ec" ? "EVALUACIÓN" : "CLASE"), el("span", "s-id", info.id));
+      const num = el("div", "s-num", String(info.num).padStart(2, "0"));
+      num.appendChild(el("small", "", info.nombre));
+      const go = el("div", "s-go"); go.append(el("span", "", "Ingresar"));
+      go.insertAdjacentHTML("beforeend", ICONO_FLECHA);
+      a.append(top, num, go);
+      return a;
+    }
+
+    function seccion(titulo, lista) {
+      const frag = document.createDocumentFragment();
+      if (!lista.length) return frag;
+      frag.appendChild(el("div", "sub-h", titulo));
+      const grid = el("div", "grid");
+      lista.forEach(s => grid.appendChild(tarjeta(s)));
+      frag.appendChild(grid);
+      return frag;
+    }
+
+    async function cargarPortal() {
+      const s = (await Acceso.listo) && Acceso.sesion();
+      const docente = s.rol === "docente";
+      document.getElementById("quien").textContent = s.nombre;
+      document.getElementById("salir").onclick = Acceso.salir;
+      document.getElementById("saludoRol").textContent = docente ? "Modo docente" : (s.grupo ? "Grupo " + s.grupo : "Portal");
+      document.getElementById("saludo").textContent = docente
+        ? "Hola, " + s.nombre.split(/\s+/)[0]
+        : "Tus clases y evaluaciones";
+      if (docente) document.getElementById("lede").textContent = "Elige una clase o evaluación para ver a tus alumnos y sus enlaces.";
+
+      const cont = document.getElementById("contenido");
+      const sesiones = await detectar();
+      cont.replaceChildren();
+      const ordenadas = sesiones.sort((a, b) => a.unidad - b.unidad || a.num - b.num);
+      const unidades = [...new Set(ordenadas.map(x => x.unidad))];
+      if (!unidades.length) { cont.appendChild(el("p", "vacio", "Aún no hay clases ni evaluaciones disponibles.")); return; }
+      for (const u of unidades) {
+        const bloque = el("section", "unidad anim");
+        const h = el("div", "unidad-h"); h.append(el("h2", "", "Unidad " + u), el("span", "linea"));
+        bloque.appendChild(h);
+        bloque.appendChild(seccion("Clases", ordenadas.filter(x => x.unidad === u && x.tipo === "class")));
+        bloque.appendChild(seccion("Evaluaciones continuas", ordenadas.filter(x => x.unidad === u && x.tipo === "ec")));
+        cont.appendChild(bloque);
+      }
+    }
+    cargarPortal();
+  </script>
+</body>
+</html>
