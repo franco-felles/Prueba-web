@@ -11,6 +11,7 @@ access/
   access.csv           quién puede entrar (alumnos + docente)
   access.js            validación, sesión y guardia de páginas
   estilo.css           diseño compartido
+  icono.png / favicon.png / login.jpg   logo, icono de pestaña e ilustración del login
   sesion.html          ÚNICA página de sesión (ver abajo)
 clases/
   class1u1.html        única clase que es página (modelo 3D de la PC); no lleva CSV
@@ -36,11 +37,13 @@ La **primera fila** del CSV repite el nombre de la sesión (`class4u1`) y debe c
 
 1. El alumno busca su nombre, escribe su código y entra. El código queda como llave **solo en esa pestaña** (`sessionStorage`; en el laboratorio las PC se comparten). Hay botón **Salir**.
 2. El portal detecta los CSV de `clases/` y `eecc/` y crea un botón por cada uno (agrupados por unidad).
-3. Al presionar un botón se abre `access/sesion.html?s=<sesión>`, que compara el código con el CSV de esa sesión:
-   - **Alumno** → pasa directo a **su enlace** (si su código no figura en el CSV, se le niega).
-   - **Docente** → ve la lista de todos los alumnos de esa clase/evaluación con su enlace (buscador y filtro por grupo; cada nombre abre su documento en pestaña nueva).
+3. **Alumno**: el portal busca su código en cada CSV y convierte cada botón en un enlace a **su documento**. Al presionarlo, el documento se abre en una **pestaña nueva**, el portal sigue abierto y aparece una **notificación** en pantalla. Si no tiene enlace o no figura en ese CSV, el botón sale deshabilitado ("Aún no disponible" / "No figuras aquí").
+   **Docente**: el botón abre `access/sesion.html?s=<sesión>`:
+   - ve la lista de todos los alumnos de esa clase/evaluación con su enlace (buscador y filtro por grupo; cada nombre abre su documento en pestaña nueva).
 
-`sesion.html` es el único modelo: sirve para cualquier clase o evaluación, no hay que crear HTML por sesión.
+`sesion.html` es el único modelo: sirve para cualquier clase o evaluación, no hay que crear HTML por sesión. (Si un alumno entra a `sesion.html?s=...` directamente, lo redirige a su enlace.)
+
+Imágenes: `access/icono.png` (logo de las cabeceras), `access/favicon.png` (icono de pestaña) y `access/login.jpg` (ilustración del login). Se cambian reemplazando el archivo.
 
 ## Agregar cosas
 

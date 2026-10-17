@@ -6,6 +6,8 @@
 <title>Aula Virtual · Herramientas Informáticas</title>
 <!-- Sin sesión iniciada, esta página te manda a acceso.html -->
 <script src="access/access.js" data-proteger data-sin-barra></script>
+<link rel="icon" type="image/png" href="access/favicon.png">
+<link rel="apple-touch-icon" href="access/icono.png">
 <link rel="stylesheet" href="access/estilo.css">
 <style>
   .hero { margin-bottom: 8px; }
@@ -36,6 +38,12 @@
   .s-go svg { width: 18px; height: 18px; transition: transform .18s; }
   a.sesion:hover .s-go svg { transform: translateX(4px); }
 
+  a.sesion.off { cursor: not-allowed; background: transparent; border-style: dashed; }
+  a.sesion.off:hover { transform: none; box-shadow: none; border-color: var(--line); }
+  a.sesion.off::before { background: var(--line); }
+  a.sesion.off .s-num, a.sesion.off .s-tipo { opacity: .55; }
+  a.sesion.off .s-go { color: var(--mut); font-weight: 500; }
+  a.sesion.abierta .s-go { color: var(--moss); }
   .skeleton { height: 150px; border-radius: 14px; background: linear-gradient(100deg, #ece8dc 30%, #f6f4ee 50%, #ece8dc 70%); background-size: 200% 100%; animation: brillo 1.2s linear infinite; }
   @keyframes brillo { to { background-position: -200% 0; } }
 </style>
@@ -44,7 +52,7 @@
   <header class="topbar">
     <div class="topbar-in">
       <div class="plate">
-        <span class="plate-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 20.5 7.2v9.6L12 21.5 3.5 16.8V7.2z"/><path d="M12 12 3.8 7.4M12 12l8.2-4.6M12 12v9.2"/></svg></span>
+        <span class="plate-mark"><img src="access/icono.png" alt=""></span>
         <span class="plate-txt"><b>Aula Virtual</b><small>Herramientas Informáticas</small></span>
       </div>
       <div class="who-chip">
@@ -62,6 +70,7 @@
     </section>
     <div id="contenido"><div class="grid"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div></div>
   </main>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
 
   <script>
     /* ==========================================================
@@ -70,9 +79,10 @@
        Para publicar algo nuevo solo sube el CSV con el nombre correcto:
          clases/class#u#.csv     -> clase # de la unidad #     (class4u1.csv, class2u2.csv ...)
          eecc/ec#u#.csv          -> evaluación continua        (ec1u1.csv, ec2u1.csv ...)
-       El botón aparece solo. Al presionarlo se abre access/sesion.html?s=<sesión>:
-         alumno  -> pasa directo a SU enlace
-         docente -> ve la lista de alumnos con sus enlaces
+       El botón aparece solo. Al presionarlo:
+         alumno  -> su documento se abre en una PESTAÑA NUEVA (el portal sigue abierto)
+                    y aparece una notificación en pantalla
+         docente -> abre access/sesion.html?s=<sesión> con la lista de alumnos y enlaces
        (clases/class1u1.html es la única clase que es una página: no lleva CSV.)
 
        Búsqueda automática: por cada unidad y tipo se prueban los números 1, 2, 3...
@@ -96,7 +106,9 @@
         Acceso.textoCSV(info.carpeta + info.id + ".csv"),
         info.tipo === "class" ? Acceso.existeHTML(info.id) : false
       ]);
-      return !!(csv || html);
+      if (!csv && !html) return null;
+      info.csv = csv; info.html = !!html;       // se guarda el CSV para saber cuál es el enlace de este alumno
+      return info;
     }
 
     async function sondear(tipo, unidad) {
@@ -104,7 +116,8 @@
       let falta = 0;
       for (let n = 1; n <= TOPE && falta < HUECOS; n++) {
         const info = Acceso.idSesion(`${tipo}${n}u${unidad}`);
-        if (await existe(info)) { halladas.push(info); falta = 0; } else falta++;
+        const hallada = await existe(info);
+        if (hallada) { halladas.push(hallada); falta = 0; } else falta++;
       }
       return halladas;
     }
@@ -115,16 +128,69 @@
       return (await Promise.all(tareas)).flat();
     }
 
+    /* Para el alumno: busca SU enlace en el CSV de la sesión. Define info.href y info.estado */
+    function resolver(info, s) {
+      info.estado = "ok";
+      if (s.rol === "docente") { info.href = "access/sesion.html?s=" + encodeURIComponent(info.id); info.interno = true; return; }
+      if (!info.csv) {                                            // clase de contenido (class1u1.html)
+        if (info.html) { info.href = `clases/${info.id}.html`; info.interno = true; info.nueva = true; } else info.estado = "nd";
+        return;
+      }
+      const t = Acceso.leerTabla(info.csv);
+      if (t.titulo && Acceso.norm(t.titulo) !== info.id) { info.estado = "titulo"; return; }
+      const fila = Acceso.buscarFila(t.filas, s.codigo);
+      if (!fila) info.estado = "no-registrado";
+      else if (!/^https?:\/\//i.test(fila.link)) info.estado = "sin-enlace";
+      else info.href = fila.link;
+    }
+    const TEXTO_ESTADO = {
+      "sin-enlace": "Aún no disponible",
+      "no-registrado": "No figuras aquí",
+      "titulo": "Archivo con error",
+      "nd": "Aún no disponible"
+    };
+
+    function toast(titulo, texto, tipo) {
+      const t = el("div", "toast" + (tipo ? " " + tipo : ""));
+      const ico = el("span", "t-ico");
+      ico.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
+      const cuerpo = el("div"); cuerpo.append(el("b", "", titulo), el("p", "", texto));
+      const x = el("button", "t-x", "×"); x.type = "button"; x.setAttribute("aria-label", "Cerrar");
+      const quitar = () => { t.classList.add("sale"); setTimeout(() => t.remove(), 300); };
+      x.onclick = quitar;
+      t.append(ico, cuerpo, x);
+      const caja = document.getElementById("toasts");
+      while (caja.children.length >= 3) caja.firstChild.remove();
+      caja.appendChild(t);
+      setTimeout(quitar, 6000);
+    }
+
     function tarjeta(info) {
-      const a = el("a", "sesion" + (info.tipo === "ec" ? " ec" : ""));
-      a.href = "access/sesion.html?s=" + encodeURIComponent(info.id);
+      const off = info.estado !== "ok";
+      const a = el("a", "sesion" + (info.tipo === "ec" ? " ec" : "") + (off ? " off" : ""));
       const top = el("div", "s-top");
       top.append(el("span", "s-tipo", info.tipo === "ec" ? "EVALUACIÓN" : "CLASE"), el("span", "s-id", info.id));
       const num = el("div", "s-num", String(info.num).padStart(2, "0"));
       num.appendChild(el("small", "", info.nombre));
-      const go = el("div", "s-go"); go.append(el("span", "", "Ingresar"));
-      go.insertAdjacentHTML("beforeend", ICONO_FLECHA);
+      const go = el("div", "s-go");
+      const lbl = el("span", "", off ? TEXTO_ESTADO[info.estado] : (info.nueva ? "Abrir clase" : info.interno ? "Ingresar" : "Abrir mi documento"));
+      go.append(lbl);
+      if (!off) go.insertAdjacentHTML("beforeend", ICONO_FLECHA);
       a.append(top, num, go);
+      if (off) { a.setAttribute("aria-disabled", "true"); a.addEventListener("click", e => e.preventDefault()); return a; }
+      a.href = info.href;
+      if (!info.interno || info.nueva) {
+        // alumno: pestaña nueva; el portal queda abierto + notificación.
+        // Los enlaces externos llevan noopener; la página interna (class1u1) no, para que herede la sesión.
+        a.target = "_blank"; if (!info.interno) a.rel = "noopener noreferrer";
+        a.addEventListener("click", e => {
+          // window.open (sin noopener) hace que la pestaña nueva herede la sesión; <a target=_blank> no
+          if (info.nueva) { e.preventDefault(); window.open(info.href, "_blank"); }
+          a.classList.add("abierta");
+          lbl.textContent = "Abierto · volver a abrir";
+          toast(info.nueva ? "Abriendo la clase" : "Abriendo tu documento", `${info.etiqueta} se abre en una pestaña nueva. Esta página sigue aquí por si quieres abrir otra.`);
+        });
+      }
       return a;
     }
 
@@ -147,10 +213,13 @@
       document.getElementById("saludo").textContent = docente
         ? "Hola, " + s.nombre.split(/\s+/)[0]
         : "Tus clases y evaluaciones";
-      if (docente) document.getElementById("lede").textContent = "Elige una clase o evaluación para ver a tus alumnos y sus enlaces.";
+      document.getElementById("lede").textContent = docente
+        ? "Elige una clase o evaluación para ver a tus alumnos y sus enlaces."
+        : "Elige tu clase o evaluación: tu documento se abre en una pestaña nueva y este portal sigue aquí.";
 
       const cont = document.getElementById("contenido");
       const sesiones = await detectar();
+      sesiones.forEach(x => resolver(x, s));
       cont.replaceChildren();
       const ordenadas = sesiones.sort((a, b) => a.unidad - b.unidad || a.num - b.num);
       const unidades = [...new Set(ordenadas.map(x => x.unidad))];
