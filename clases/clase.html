@@ -214,7 +214,9 @@ async function manifiesto() {
   else if (r.haySemilla || r.docs.some(d => d.url)) cont.appendChild(carpeta("doc", esEC ? "Mi evaluación" : "Mi documento", miDocumento(r.docs, esEC)));
 
   // 2. Material de clase: HTML del repo (material/m#…) y luego los archivos de la carpeta de Drive
-  const material = (man[c.id.replace(/([a-z])0+(\d)/g, "$1$2")] || [])   // tolera "u1c01" = "u1c1".map(f => ({ titulo: f.titulo, tipo: f.tipo, descripcion: f.descripcion, url: f.ruta, interna: true }))
+  // (el replace tolera "u1c01" = "u1c1")
+  const material = (man[c.id.replace(/([a-z])0+(\d)/g, "$1$2")] || [])
+    .map(f => ({ titulo: f.titulo, tipo: f.tipo, descripcion: f.descripcion, url: f.ruta, interna: true }))
     .concat(r.materiales);
   if (material.length) cont.appendChild(carpeta("play", "Material de clase", grid(material), material.length));
 
