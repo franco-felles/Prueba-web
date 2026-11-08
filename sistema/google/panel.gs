@@ -57,6 +57,8 @@ function onOpen() {
     .addItem("Importar alumnos (PDF en LISTAS)", "importarAlumnosPDF")
     .addItem("Importar alumnos (texto pegado en «Importar»)", "importarAlumnosTexto")
     .addSeparator()
+    .addItem("Asignar grupo a los seleccionados…", "asignarGrupoSeleccion")
+    .addSeparator()
     .addItem("Nueva clase / EC…", "nuevaClase")
     .addItem("Generar copias", "generarCopias")
     .addItem("Limpiar copias borradas", "limpiarCopias")
@@ -235,7 +237,7 @@ function onEdit(e) {
     for (let r = e.range.getRow(); r <= e.range.getLastRow(); r++) {
       const grupo = sh.getRange(r, cGrupo).getValue();
       const est = sh.getRange(r, cEstado);
-      if (grupo && (est.getValue() === "Pendiente" || !est.getValue())) est.setValue("Activo");
+      if (grupo && est.getValue() !== "Retirado") est.setValue("Activo");    // si le das grupo, asistió
       // Cambió de grupo (o lo quitaste): pierde su número y se renumera en el grupo nuevo
       const cambio = unaCelda ? String(e.oldValue || "") !== String(e.value || "") : !grupo;
       if (cambio) sh.getRange(r, colDe(sh, "N")).clearContent();
@@ -244,6 +246,42 @@ function onEdit(e) {
   }
   if ([cGrupo, cPC, cEstado].some(x => e.range.getColumn() <= x && x <= e.range.getLastColumn())) actualizarLaboratorio();
   try { invalidarCache(["alumnos"]); } catch (_) {}      // número de orden / PC recién calculados
+}
+
+/** Menú: selecciona alumnos (cualquier celda de sus filas, puedes usar Ctrl o Shift para varias) y asígnales un grupo de una vez.
+ *  Quedan Activos, reciben su número dentro del grupo y el Laboratorio se actualiza. Vacío = quitar el grupo. */
+function asignarGrupoSeleccion() {
+  const ui = SpreadsheetApp.getUi(), ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet();
+  if (sh.getName() !== HOJA.alumnos) return aviso("Primero ve a la pestaña Alumnos y selecciona las filas de los alumnos.");
+  const filas = [];
+  (ss.getActiveRangeList() ? ss.getActiveRangeList().getRanges() : [sh.getActiveRange()]).forEach(r => {
+    for (let f = r.getRow(); f <= r.getLastRow(); f++) if (f >= 2 && f <= sh.getLastRow() && filas.indexOf(f) < 0) filas.push(f);
+  });
+  if (!filas.length) return aviso("Selecciona una o varias filas de alumnos (desde la fila 2).");
+
+  const grupos = config().grupos;
+  const resp = ui.prompt("Asignar grupo", `${filas.length} alumno(s) seleccionado(s).\n\nEscribe el grupo (${grupos.join(", ")}).\nDéjalo vacío para QUITAR el grupo.`, ui.ButtonSet.OK_CANCEL);
+  if (resp.getSelectedButton() !== ui.Button.OK) return;
+  const t = resp.getResponseText().trim().toUpperCase();
+  const g = grupos.find(x => x.toUpperCase() === t || x.toUpperCase() === "G" + t) || "";
+  if (t && !g) return aviso(`«${t}» no es un grupo. Grupos válidos: ${grupos.join(", ")} (se cambian en Config → GRUPOS).`);
+
+  const cG = colDe(sh, "GRUPO"), cE = colDe(sh, "ESTADO"), cN = colDe(sh, "N");
+  let cambiados = 0;
+  filas.forEach(f => {
+    if (String(sh.getRange(f, cG).getValue()) === g) return;                 // ya estaba en ese grupo: conserva su número
+    sh.getRange(f, cG).setValue(g);
+    sh.getRange(f, cN).clearContent();                                       // se renumera dentro del grupo nuevo
+    const est = sh.getRange(f, cE).getValue();
+    if (g && est !== "Retirado") sh.getRange(f, cE).setValue("Activo");          // si le das grupo, asistió
+    if (!g && est === "Activo") sh.getRange(f, cE).setValue("Pendiente");
+    cambiados++;
+  });
+  numerarGrupos();
+  actualizarLaboratorio();
+  invalidarCache(["alumnos"]);
+  aviso(g ? `${cambiados} alumno(s) pasaron a ${g} (Activos y numerados).` + (filas.length > cambiados ? `\n${filas.length - cambiados} ya estaban en ${g}.` : "")
+          : `Se quitó el grupo a ${cambiados} alumno(s) (vuelven a Pendiente).`);
 }
 
 /** Da número de orden dentro de cada grupo (1, 2, 3…) a los activos que aún no tienen. Nunca cambia uno ya dado. */

@@ -31,7 +31,7 @@ Pega el código nuevo y luego: **Implementar → Gestionar implementaciones → 
 | Momento | Qué haces |
 |---|---|
 | Inicio de mes | `Config → MES` (ej. `DIC 2026`) → se crea la carpeta. PDF de la institución en `<MES>/LISTAS` → **Aula → Importar alumnos (PDF)** |
-| Primera clase | `Config → PCS` con las PC de la sede. En `Alumnos`: **GRUPO** (queda *Activo* y numerado) y **PC** (solo el número) |
+| Primera clase | `Config → PCS` con las PC de la sede. En `Alumnos`, selecciona a los que llegaron (Shift/Ctrl para varios) → **Aula → Asignar grupo a los seleccionados** (quedan *Activos* y numerados). Luego la **PC** de cada uno (solo el número) |
 | Nueva clase | **Aula → Nueva clase / EC** (`u1 4` o `u1 ec2`) → edita la semilla en su carpeta |
 | Antes de clase | Pon una o varias semillas en la carpeta de la clase (`SEMILLA - Práctica Excel`, `SEMILLA - Informe`…) → **Aula → Generar copias** (solo crea las que faltan; cubre tardíos y semillas nuevas) → marca **PUBLICADA** en `Clases` |
 | Quiero que las copias se hagan solas | **Aula → Copiado automático** (una vez). Cada 15 min crea las copias que falten en las clases **PUBLICADAS**. Lo último que hizo: `Config → AUTO_COPIAS` |
