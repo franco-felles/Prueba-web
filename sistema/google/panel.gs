@@ -34,7 +34,7 @@ const HOJA = {
 const CABECERAS = {
   Alumnos:  ["CODIGO", "APELLIDOS Y NOMBRES", "N LISTA", "ESTADO", "GRUPO", "N", "PC", "COMPARTE CON", "ORIGEN", "NOTA"],
   Clases:   ["ID", "TIPO", "UNIDAD", "N", "TEMA", "CARPETA", "PUBLICADA", "COPIAS", "NOTA"],
-  Entregas: ["CLASE", "CODIGO", "GRUPO", "N", "ALUMNO", "ENLACE", "ARCHIVO_ID", "CREADO"],
+  Entregas: ["CLASE", "CODIGO", "GRUPO", "N", "ALUMNO", "ENLACE", "ARCHIVO_ID", "CREADO", "SEMILLA", "TITULO", "TIPO"],
   Enlaces:  ["CLASE", "ORDEN", "TIPO", "TITULO", "URL", "PARA"]
 };
 
@@ -91,7 +91,7 @@ function configurarPanel() {
   // Tablas
   Object.keys(CABECERAS).forEach(n => {
     const sh = hoja(n);
-    if (sh.getLastRow() === 0) sh.getRange(1, 1, 1, CABECERAS[n].length).setValues([CABECERAS[n]]);
+    asegurarCabecera(sh, CABECERAS[n]);
     estiloCabecera(sh, CABECERAS[n].length);
   });
 
@@ -343,14 +343,24 @@ function nuevaClase() {
         " y luego usa Aula → Generar copias.");
 }
 
-/** Busca el archivo semilla: nombre que empieza con «SEMILLA» o «profesor». */
-function semillaDe(carpeta) {
-  const it = carpeta.getFiles();
+/** Todas las semillas de la carpeta: archivos cuyo nombre empieza con «SEMILLA» o «profesor» (puede haber varias: un Doc y un Sheet…). */
+function semillasDe(carpeta) {
+  const out = [], it = carpeta.getFiles();
   while (it.hasNext()) {
     const f = it.next(), n = f.getName().toLowerCase();
-    if (n.indexOf("semilla") === 0 || n.indexOf("profesor") === 0) return f;
+    if (n.indexOf("semilla") === 0 || n.indexOf("profesor") === 0) out.push(f);
   }
-  return null;
+  return out.sort((a, b) => a.getName().localeCompare(b.getName()));
+}
+
+/** Nombre que verá el alumno: «SEMILLA - Práctica Excel» → «Práctica Excel». Sin texto extra → el tipo de archivo. */
+function etiquetaSemilla(f, idClase) {
+  let t = f.getName().replace(/\.[a-z0-9]{2,5}$/i, "")
+    .replace(/^(semilla|profesor)\b[\s\-–_:]*/i, "").replace(/^(profesor)\b[\s\-–_:]*/i, "");
+  if (idClase) t = t.replace(new RegExp("^" + idClase + "\\b[\\s\\-–_:]*", "i"), "");
+  t = t.trim();
+  const tipo = tipoDeMime(f.getMimeType());
+  return t || ({ documento: "Documento", hoja: "Hoja de cálculo", presentacion: "Presentación" })[tipo] || "Mi documento";
 }
 
 function carpetaDeClase(fila) {
@@ -368,9 +378,12 @@ function generarCopias() {
     .sort((a, b) => (a.GRUPO + String(a.N).padStart(3, "0")).localeCompare(b.GRUPO + String(b.N).padStart(3, "0")));
   if (!alumnos.length) return aviso("No hay alumnos Activos con GRUPO asignado.");
 
-  const shE = hoja(HOJA.entregas), tE = leerTabla(shE);
-  const hechas = {};
-  tE.filas.forEach(f => hechas[f.CLASE + "|" + f.CODIGO] = true);
+  const shE = hoja(HOJA.entregas);
+  asegurarCabecera(shE, CABECERAS.Entregas);
+  const tE = leerTabla(shE);
+  const hechas = {};   // clase|código|semilla  (filas antiguas sin SEMILLA cuentan como la única semilla)
+  tE.filas.forEach(f => hechas[f.CLASE + "|" + f.CODIGO + "|" + (f.SEMILLA || "*")] = true);
+  const yaTiene = (clase, cod, sem, unica) => hechas[clase + "|" + cod + "|" + sem] || (unica && hechas[clase + "|" + cod + "|*"]);
 
   const shC = hoja(HOJA.clases), tC = leerTabla(shC, ["CARPETA"]);
   let creadas = 0, cortado = false;
@@ -379,19 +392,24 @@ function generarCopias() {
   for (const clase of tC.filas) {
     const carpeta = carpetaDeClase(clase);
     if (!carpeta) { sinSemilla.push(clase.ID + " (sin carpeta)"); continue; }
-    const semilla = semillaDe(carpeta);
-    if (!semilla) { sinSemilla.push(clase.ID); continue; }
+    const semillas = semillasDe(carpeta);
+    if (!semillas.length) { sinSemilla.push(clase.ID); continue; }
     const destino = subcarpeta(carpeta, "ALUMNOS");
     let n = 0;
-    for (const a of alumnos) {
-      if (hechas[clase.ID + "|" + a.CODIGO]) continue;
-      if (Date.now() - inicio > LIMITE_MS) { cortado = true; break; }
-      const nombre = `${a.GRUPO}-${String(a.N).padStart(2, "0")} - ${a["APELLIDOS Y NOMBRES"]} - ${clase.ID}`;
-      const copia = semilla.makeCopy(nombre, destino);
-      copia.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.EDIT);
-      shE.appendRow(filaDesde(tE.cab, { CLASE: clase.ID, CODIGO: a.CODIGO, GRUPO: a.GRUPO, N: a.N,
-        ALUMNO: a["APELLIDOS Y NOMBRES"], ENLACE: copia.getUrl(), ARCHIVO_ID: copia.getId(), CREADO: new Date() }));
-      hechas[clase.ID + "|" + a.CODIGO] = true; n++; creadas++;
+    for (const semilla of semillas) {
+      const sid = semilla.getId(), titulo = etiquetaSemilla(semilla, clase.ID), tipo = tipoDeMime(semilla.getMimeType());
+      for (const a of alumnos) {
+        if (yaTiene(clase.ID, a.CODIGO, sid, semillas.length === 1)) continue;
+        if (Date.now() - inicio > LIMITE_MS) { cortado = true; break; }
+        const nombre = `${a.GRUPO}-${String(a.N).padStart(2, "0")} - ${a["APELLIDOS Y NOMBRES"]} - ${clase.ID}` + (semillas.length > 1 ? " - " + titulo : "");
+        const copia = semilla.makeCopy(nombre, destino);
+        copia.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.EDIT);
+        shE.appendRow(filaDesde(tE.cab, { CLASE: clase.ID, CODIGO: a.CODIGO, GRUPO: a.GRUPO, N: a.N,
+          ALUMNO: a["APELLIDOS Y NOMBRES"], ENLACE: copia.getUrl(), ARCHIVO_ID: copia.getId(), CREADO: new Date(),
+          SEMILLA: sid, TITULO: titulo, TIPO: tipo }));
+        hechas[clase.ID + "|" + a.CODIGO + "|" + sid] = true; n++; creadas++;
+      }
+      if (cortado) break;
     }
     if (n) resumen.push(`${clase.ID}: ${n}`);
     if (cortado) break;
@@ -479,6 +497,14 @@ function escribir(sh, tabla, fila, cambios) {
     const j = tabla.cab.indexOf(k);
     if (j >= 0) sh.getRange(fila, j + 1).setValue(cambios[k]);
   });
+}
+
+/** Escribe la cabecera si la hoja está vacía, o agrega al final las columnas nuevas que falten (no mueve las existentes). */
+function asegurarCabecera(sh, cab) {
+  if (sh.getLastRow() === 0) { sh.getRange(1, 1, 1, cab.length).setValues([cab]); return; }
+  const actual = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(String);
+  const faltan = cab.filter(c => actual.indexOf(c) < 0);
+  if (faltan.length) sh.getRange(1, actual.length + 1, 1, faltan.length).setValues([faltan]);
 }
 
 function filaDesde(cab, obj) { return cab.map(c => obj[c] === undefined ? "" : obj[c]); }

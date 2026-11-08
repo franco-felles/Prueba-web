@@ -40,6 +40,8 @@ const ACCIONES = {
 
 /* ======================= SESIÓN ======================= */
 
+/** "U1C01" → "u1c1", "EC2U1" → "ec2u1": tolera ceros y mayúsculas en los IDs escritos a mano. */
+const normId = s => String(s || "").toLowerCase().trim().replace(/([a-z])0+(\d)/g, "$1$2");
 const normCodigo = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 const cache = () => CacheService.getScriptCache();
 
@@ -143,7 +145,7 @@ function contrasenaDocente() {
 
 function clasesTodas() {
   return leerTabla(hoja(HOJA.clases), ["CARPETA"]).filas.filter(f => f.ID).map(f => ({
-    id: String(f.ID), tipo: f.TIPO, unidad: f.UNIDAD, n: f.N, tema: f.TEMA, publicada: f.PUBLICADA === true, _fila: f
+    id: normId(f.ID), tipo: f.TIPO, unidad: f.UNIDAD, n: f.N, tema: f.TEMA, publicada: f.PUBLICADA === true, _fila: f
   }));
 }
 const clasePublica = c => ({ id: c.id, tipo: c.tipo, unidad: c.unidad, n: c.n, tema: c.tema, publicada: c.publicada });
@@ -203,7 +205,7 @@ function materialesDe(c) {
 function apiClase(req) {
   const s = sesionDe(req);
   const docente = s.rol === "docente";
-  const c = clasesTodas().find(x => x.id === String(req.id || "").toLowerCase());
+  const c = clasesTodas().find(x => x.id === normId(req.id));
   if (!c || (!docente && !c.publicada)) throw new Error("Esta clase no está disponible.");
 
   const todos = alumnosTodos();
@@ -211,21 +213,20 @@ function apiClase(req) {
   const grupos = misAlumnos.map(a => a.GRUPO);
 
   const enlaces = leerTabla(hoja(HOJA.enlaces)).filas
-    .filter(f => String(f.CLASE).toLowerCase() === c.id && f.URL)
+    .filter(f => normId(f.CLASE) === c.id && f.URL)
     .filter(f => docente || !f.PARA || f.PARA === "Todos" || grupos.indexOf(f.PARA) >= 0)
     .sort((a, b) => (Number(a.ORDEN) || 99) - (Number(b.ORDEN) || 99))
     .map(f => ({ titulo: f.TITULO || f.URL, url: f.URL, tipo: f.TIPO || "enlace", para: f.PARA || "Todos" }));
 
-  const entregas = leerTabla(hoja(HOJA.entregas)).filas.filter(f => f.CLASE === c.id);
-  let docs;
-  if (docente) {
-    docs = todos.filter(esActivo).map(a => {
-      const e = entregas.find(x => x.CODIGO === a.CODIGO);
-      return Object.assign(pub(a), { url: e ? e.ENLACE : null });
-    });
-  } else {
-    docs = misAlumnos.map(a => { const e = entregas.find(x => x.CODIGO === a.CODIGO); return Object.assign(pub(a), { url: e ? e.ENLACE : null }); });
-  }
+  // Cada alumno puede tener varias copias (una por semilla: un Doc y un Sheet, etc.). `url` = la primera, por compatibilidad.
+  const entregas = leerTabla(hoja(HOJA.entregas)).filas.filter(f => normId(f.CLASE) === c.id && f.ENLACE);
+  const conArchivos = a => {
+    const archivos = entregas.filter(x => x.CODIGO === a.CODIGO)
+      .map(x => ({ titulo: x.TITULO || "Mi documento", tipo: x.TIPO || "documento", url: x.ENLACE }))
+      .sort((p, q) => p.titulo.localeCompare(q.titulo));
+    return Object.assign(pub(a), { archivos, url: archivos.length ? archivos[0].url : null });
+  };
+  const docs = (docente ? todos.filter(esActivo) : misAlumnos).map(conArchivos);
 
   const quizzes = quizzesTodos().filter(q => q.clase === c.id && (docente || q.abierto))
     .map(q => ({ id: q.id, titulo: q.titulo, abierto: q.abierto, npreg: q.npreg }));
@@ -243,7 +244,7 @@ function tablaFija(nombre, cab) {
 function quizzesTodos() {
   return leerTabla(tablaFija("Quiz", CAB_QUIZ)).filas.filter(f => f.ID).map(f => {
     let preguntas = []; try { preguntas = JSON.parse(f.PREGUNTAS || "[]"); } catch (_) {}
-    return { id: String(f.ID), titulo: f.TITULO, clase: String(f.CLASE || "").toLowerCase(), mostrar: Number(f.MOSTRAR) || 0,
+    return { id: String(f.ID), titulo: f.TITULO, clase: normId(f.CLASE), mostrar: Number(f.MOSTRAR) || 0,
              abierto: f.ABIERTO === true || f.ABIERTO === "TRUE", npreg: preguntas.length, preguntas, _fila: f._fila };
   });
 }
@@ -295,7 +296,7 @@ function apiQuizGuardar(req) {
   try {
     const sh = tablaFija("Quiz", CAB_QUIZ), t = leerTabla(sh);
     const id = d.id || "qz" + Date.now().toString(36);
-    const fila = { ID: id, TITULO: titulo, CLASE: String(d.clase || "").toLowerCase(), MOSTRAR: Math.max(0, Number(d.mostrar) || 0),
+    const fila = { ID: id, TITULO: titulo, CLASE: normId(d.clase), MOSTRAR: Math.max(0, Number(d.mostrar) || 0),
                    ABIERTO: !!d.abierto, NPREG: preguntas.length, PREGUNTAS: JSON.stringify(preguntas), ACTUALIZADO: new Date() };
     const existente = t.filas.find(f => f.ID === id);
     if (existente) escribir(sh, t, existente._fila, fila);

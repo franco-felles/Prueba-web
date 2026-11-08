@@ -123,14 +123,19 @@ function grid(lista) { const g = el("div", "items"); lista.forEach(x => g.append
 /* ---------- mi documento (alumno) ---------- */
 function miDocumento(docs, esEC) {
   const box = el("div", "midoc");
+  const varios = docs.length > 1;
   docs.forEach(d => {
-    if (d.url) {
-      const a = el("a", "doc-grande"); a.href = d.url; a.target = "_blank"; a.rel = "noopener noreferrer";
-      const t = el("span", "tx"); t.append(el("b", "", esEC ? "Abrir mi evaluación" : "Abrir mi documento"),
-        el("small", "", Aula.nombreBonito(d.nombre) + " · " + d.grupo + "-" + String(d.n).padStart(2, "0")));
-      a.append(el("span", "ti", esEC ? "📝" : "📄"), t);
-      a.addEventListener("click", () => Aula.toast("Abriendo tu documento", "Se abre en una pestaña nueva. Esta página sigue aquí."));
-      box.appendChild(a);
+    const archivos = d.archivos || (d.url ? [{ titulo: "", tipo: "documento", url: d.url }] : []);
+    if (archivos.length) {
+      archivos.forEach(f => {
+        const a = el("a", "doc-grande"); a.href = f.url; a.target = "_blank"; a.rel = "noopener noreferrer";
+        const titulo = archivos.length > 1 || (f.titulo && f.titulo !== "Mi documento") ? f.titulo : (esEC ? "Abrir mi evaluación" : "Abrir mi documento");
+        const t = el("span", "tx"); t.append(el("b", "", titulo),
+          el("small", "", (varios ? Aula.nombreBonito(d.nombre) + " · " : "") + (NOMBRE_TIPO[f.tipo] || "Documento") + " · " + d.grupo + "-" + String(d.n).padStart(2, "0")));
+        a.append(el("span", "ti", EMOJI[f.tipo] || "📄"), t);
+        a.addEventListener("click", () => Aula.toast("Abriendo tu documento", "Se abre en una pestaña nueva. Esta página sigue aquí."));
+        box.appendChild(a);
+      });
     } else {
       box.appendChild(el("div", "sin-doc", Aula.nombreBonito(d.nombre) + ": aún no tienes documento en esta clase. Si tu docente lo indica, avísale."));
     }
@@ -165,8 +170,12 @@ function listaDocente(docs) {
         const tr = el("tr");
         tr.append(el("td", "n", d.grupo + "-" + String(d.n || "").padStart(2, "0")), el("td", "", Aula.nombreBonito(d.nombre)), el("td", "n", d.pc ? "PC " + d.pc : "—"));
         const td = el("td");
-        if (d.url) { const a = el("a", "", "Abrir ↗"); a.href = d.url; a.target = "_blank"; a.rel = "noopener"; td.appendChild(a); }
-        else td.appendChild(el("span", "falta", "sin copia"));
+        const archivos = d.archivos || (d.url ? [{ titulo: "Abrir", url: d.url }] : []);
+        archivos.forEach((f, k) => {
+          const a = el("a", "", (archivos.length > 1 ? f.titulo : "Abrir") + " ↗"); a.href = f.url; a.target = "_blank"; a.rel = "noopener";
+          if (k) td.append(" · "); td.appendChild(a);
+        });
+        if (!archivos.length) td.appendChild(el("span", "falta", "sin copia"));
         tr.appendChild(td); tb.appendChild(tr);
       });
     t.appendChild(tb); tw.replaceChildren(t);
@@ -205,7 +214,7 @@ async function manifiesto() {
   else if (r.haySemilla || r.docs.some(d => d.url)) cont.appendChild(carpeta("doc", esEC ? "Mi evaluación" : "Mi documento", miDocumento(r.docs, esEC)));
 
   // 2. Material de clase: HTML del repo (material/m#…) y luego los archivos de la carpeta de Drive
-  const material = (man[c.id] || []).map(f => ({ titulo: f.titulo, tipo: f.tipo, descripcion: f.descripcion, url: f.ruta, interna: true }))
+  const material = (man[c.id.replace(/([a-z])0+(\d)/g, "$1$2")] || [])   // tolera "u1c01" = "u1c1".map(f => ({ titulo: f.titulo, tipo: f.tipo, descripcion: f.descripcion, url: f.ruta, interna: true }))
     .concat(r.materiales);
   if (material.length) cont.appendChild(carpeta("play", "Material de clase", grid(material), material.length));
 
