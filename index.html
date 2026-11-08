@@ -10,11 +10,16 @@
 <link rel="apple-touch-icon" href="access/icono.png">
 <link rel="stylesheet" href="access/estilo.css">
 <style>
+  :root { --ev: #5b4bb0; --ev-d: #3d2f86; --ev-bg: #efecfa; }
   .hero { margin-bottom: 8px; }
   .unidad { margin-top: 38px; }
   .unidad-h { display: flex; align-items: baseline; gap: 12px; margin: 0 0 4px; }
   .unidad-h h2 { font-size: 1.35rem; letter-spacing: -.01em; margin: 0; }
   .unidad-h .linea { flex: 1; border-top: 1px solid var(--line); transform: translateY(-4px); }
+  details.unidad > summary.unidad-h { list-style: none; cursor: pointer; user-select: none; }
+  details.unidad > summary.unidad-h::-webkit-details-marker { display: none; }
+  details.unidad > summary.unidad-h::before { content: "▾"; font-family: var(--mono); font-size: 1rem; color: var(--mut); align-self: center; transition: transform .18s ease; }
+  details.unidad:not([open]) > summary.unidad-h::before { transform: rotate(-90deg); }
   .sub-h { font-family: var(--mono); font-size: .72rem; color: var(--mut); text-transform: uppercase; letter-spacing: .6px; margin: 20px 0 10px; }
 
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
@@ -26,6 +31,7 @@
     overflow: hidden; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
   }
   a.sesion.ec { --acc: var(--amber); --acc-d: var(--amber-d); --acc-bg: var(--amber-bg); }
+  a.sesion.ev { --acc: var(--ev); --acc-d: var(--ev-d); --acc-bg: var(--ev-bg); }
   a.sesion::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--acc); }
   a.sesion:hover { transform: translateY(-3px); border-color: var(--acc); box-shadow: 0 12px 28px rgba(16, 35, 28, .10); }
   a.sesion:focus-visible { outline: 3px solid rgba(53, 81, 63, .3); outline-offset: 2px; }
@@ -92,6 +98,7 @@
     const UNIDADES = [1, 2, 3, 4];   // cuántas unidades se buscan
     const HUECOS = 3;                // se tolera faltar hasta 3 números seguidos (class5 sin class6, class7 y class8 => fin)
     const TOPE = 40;                 // límite de seguridad por unidad y tipo
+    const ECV_LABELS = ["f"];        // etiquetas de evaluaciones virtuales (f = Final); añade más aquí (ej. "p" para Parcial)
 
     const ICONO_FLECHA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
 
@@ -105,11 +112,23 @@
     async function existe(info) {
       const [csv, html] = await Promise.all([
         Acceso.textoCSV(info.carpeta + info.id + ".csv"),
-        info.tipo !== "ec" ? Acceso.existeHTML(info.id) : false
+        (info.tipo === "class" || info.tipo === "reu") ? Acceso.existeHTML(info.id) : false
       ]);
       if (!csv && !html) return null;
       info.csv = csv; info.html = !!html;       // se guarda el CSV para saber cuál es el enlace de este alumno
+      info.material = csv && info.tipo === "class" ? await existeMaterial(info) : false;   // ¿hay material/material_u#_c#.html?
       return info;
+    }
+
+    /* Convención: clase 2 de la unidad 2 (class2u2)  ->  material/material_u2_c2.html */
+    const rutaMaterial = info => `material/material_u${info.unidad}_c${info.num}.html`;
+
+    /* ¿Existe el material de esta clase? (se descartan respuestas que no son HTML) */
+    async function existeMaterial(info) {
+      try {
+        const r = await fetch(Acceso.url(rutaMaterial(info)), { method: "HEAD", cache: "no-store" });
+        return r.ok && (r.headers.get("content-type") || "").includes("text/html");
+      } catch { return false; }
     }
 
     async function sondear(tipo, unidad) {
@@ -125,13 +144,31 @@
 
     async function detectar() {
       const tareas = [];
-      for (const u of UNIDADES) for (const tipo of ["class", "ec", "reu"]) tareas.push(sondear(tipo, u));
+      for (const u of UNIDADES) {
+        for (const tipo of ["class", "ec", "reu"]) tareas.push(sondear(tipo, u));
+        for (const lbl of ECV_LABELS) tareas.push(sondearECV(lbl, u));
+      }
       return (await Promise.all(tareas)).flat();
+    }
+
+    /* Evaluaciones virtuales (ecv): el "número" es una etiqueta (F = Final). */
+    async function sondearECV(label, unidad) {
+      const info = Acceso.idSesion(`ecv${label}u${unidad}`);
+      const csv = await Acceso.textoCSV(info.carpeta + info.id + ".csv");
+      if (!csv) return [];
+      info.csv = csv; info.html = false; info.material = false;
+      return [info];
     }
 
     /* Para el alumno: busca SU enlace en el CSV de la sesión. Define info.href y info.estado */
     function resolver(info, s) {
       info.estado = "ok";
+      if (info.tipo === "ecv") {
+        info.href = "ecv/examen.html?s=" + encodeURIComponent(info.id);
+        info.interno = true;
+        if (s.rol !== "docente") info.nueva = true;
+        return;
+      }
       if (s.rol === "docente") { info.href = "access/sesion.html?s=" + encodeURIComponent(info.id); info.interno = true; return; }
       if (!info.csv) {                                            // clase de contenido (class1u1.html)
         if (info.html) { info.href = info.carpeta + info.id + ".html"; info.interno = true; info.nueva = true; } else info.estado = "nd";
@@ -143,6 +180,14 @@
       if (!fila) info.estado = "no-registrado";
       else if (!/^https?:\/\//i.test(fila.link)) info.estado = "sin-enlace";
       else info.href = fila.link;
+
+      // Si hay material/material_u#_c#.html, el alumno pasa primero por ahí (el material lee su enlace del CSV).
+      // Se abre con window.open (ver tarjeta) para que la pestaña nueva herede la sesión.
+      if (info.material && info.estado !== "no-registrado" && info.estado !== "titulo") {
+        info.estado = "ok";
+        info.href = rutaMaterial(info);
+        info.interno = true; info.nueva = true; info.esMaterial = true;
+      }
     }
     const TEXTO_ESTADO = {
       "sin-enlace": "Aún no disponible",
@@ -168,13 +213,13 @@
 
     function tarjeta(info) {
       const off = info.estado !== "ok";
-      const a = el("a", "sesion" + (info.tipo === "ec" ? " ec" : "") + (off ? " off" : ""));
+      const a = el("a", "sesion" + (info.tipo === "ec" ? " ec" : info.tipo === "ecv" ? " ev" : "") + (off ? " off" : ""));
       const top = el("div", "s-top");
-      top.append(el("span", "s-tipo", ({ ec: "EVALUACIÓN", reu: "REPASO", class: "CLASE" })[info.tipo]), el("span", "s-id", info.id));
-      const num = el("div", "s-num", String(info.num).padStart(2, "0"));
+      top.append(el("span", "s-tipo", ({ ec: "EVALUACIÓN", ecv: "EVALUACIÓN VIRTUAL", reu: "REPASO", class: "CLASE" })[info.tipo]), el("span", "s-id", info.id));
+      const num = el("div", "s-num", info.tipo === "ecv" ? (info.label || "?").toUpperCase() : String(info.num).padStart(2, "0"));
       num.appendChild(el("small", "", info.nombre));
       const go = el("div", "s-go");
-      const lbl = el("span", "", off ? TEXTO_ESTADO[info.estado] : (info.nueva ? (info.tipo === "reu" ? "Abrir repaso" : "Abrir clase") : info.interno ? "Ingresar" : "Abrir mi documento"));
+      const lbl = el("span", "", off ? TEXTO_ESTADO[info.estado] : (info.tipo === "ecv" ? (info.nueva ? "Rendir evaluación" : "Ver alumnos y notas") : info.esMaterial ? "Ver material" : info.nueva ? (info.tipo === "reu" ? "Abrir repaso" : "Abrir clase") : info.interno ? "Ingresar" : "Abrir mi documento"));
       go.append(lbl);
       if (!off) go.insertAdjacentHTML("beforeend", ICONO_FLECHA);
       a.append(top, num, go);
@@ -189,7 +234,7 @@
           if (info.nueva) { e.preventDefault(); window.open(info.href, "_blank"); }
           a.classList.add("abierta");
           lbl.textContent = "Abierto · volver a abrir";
-          toast(info.nueva ? (info.tipo === "reu" ? "Abriendo el repaso" : "Abriendo la clase") : "Abriendo tu documento", `${info.etiqueta} se abre en una pestaña nueva. Esta página sigue aquí por si quieres abrir otra.`);
+          toast(info.esMaterial ? "Abriendo el material" : info.nueva ? (info.tipo === "reu" ? "Abriendo el repaso" : info.tipo === "ecv" ? "Abriendo la evaluación" : "Abriendo la clase") : "Abriendo tu documento", `${info.etiqueta} se abre en una pestaña nueva. Esta página sigue aquí por si quieres abrir otra.`);
         });
       }
       return a;
@@ -226,13 +271,17 @@
       const unidades = [...new Set(ordenadas.map(x => x.unidad))];
       if (!unidades.length) { cont.appendChild(el("p", "vacio", "Aún no hay clases ni evaluaciones disponibles.")); return; }
       for (const u of unidades) {
-        const bloque = el("section", "unidad anim");
-        const h = el("div", "unidad-h"); h.append(el("h2", "", "Unidad " + u), el("span", "linea"));
-        bloque.appendChild(h);
-        bloque.appendChild(seccion("Clases", ordenadas.filter(x => x.unidad === u && x.tipo === "class")));
-        bloque.appendChild(seccion("Evaluaciones continuas", ordenadas.filter(x => x.unidad === u && x.tipo === "ec")));
-        bloque.appendChild(seccion("Repasos", ordenadas.filter(x => x.unidad === u && x.tipo === "reu")));
-        cont.appendChild(bloque);
+        const det = document.createElement("details");
+        det.className = "unidad anim";
+        const sum = document.createElement("summary");
+        sum.className = "unidad-h";
+        sum.append(el("h2", "", "Unidad " + u), el("span", "linea"));
+        det.appendChild(sum);
+        det.appendChild(seccion("Clases", ordenadas.filter(x => x.unidad === u && x.tipo === "class")));
+        det.appendChild(seccion("Evaluaciones continuas", ordenadas.filter(x => x.unidad === u && x.tipo === "ec")));
+        det.appendChild(seccion("Evaluaciones en plataforma", ordenadas.filter(x => x.unidad === u && x.tipo === "ecv")));
+        det.appendChild(seccion("Repasos", ordenadas.filter(x => x.unidad === u && x.tipo === "reu")));
+        cont.appendChild(det);
       }
     }
     cargarPortal();

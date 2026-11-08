@@ -117,17 +117,32 @@
   }
 
   /* ---------- nombres de sesión ---------- */
-  /** "class4u1" -> Clase 4 · Unidad 1 | "reu1u1" -> Repaso 1 · Unidad 1 | "ec1u2" -> Evaluación continua 1 · Unidad 2 | otra cosa -> null */
+  /** "class4u1" -> Clase 4 · Unidad 1 | "reu1u1" -> Repaso 1 · Unidad 1 | "ec1u2" -> Evaluación continua 1 · Unidad 2
+   *  "ecvFu2"  -> Evaluación virtual (Final) · Unidad 2 (tipo "ecv": quiz en plataforma) | otra cosa -> null */
   function idSesion(id) {
-    const m = /^(class|ec|reu)(\d+)u(\d+)$/i.exec(String(id || "").trim());
-    if (!m) return null;
-    const tipo = m[1].toLowerCase(), num = Number(m[2]), unidad = Number(m[3]);
-    const nombre = ({ class: "Clase ", ec: "Evaluación continua ", reu: "Repaso " })[tipo] + num;
-    return {
-      id: String(id).trim().toLowerCase(), tipo, num, unidad,
-      carpeta: ({ class: "clases/", ec: "eecc/", reu: "review/" })[tipo],
-      nombre, etiqueta: `${nombre} · Unidad ${unidad}`
-    };
+    const s = String(id || "").trim();
+    let m = /^(class|ec|reu)(\d+)u(\d+)$/i.exec(s);
+    if (m) {
+      const tipo = m[1].toLowerCase(), num = Number(m[2]), unidad = Number(m[3]);
+      const nombre = ({ class: "Clase ", ec: "Evaluación continua ", reu: "Repaso " })[tipo] + num;
+      return {
+        id: s.toLowerCase(), tipo, num, unidad,
+        carpeta: ({ class: "clases/", ec: "eecc/", reu: "review/" })[tipo],
+        nombre, etiqueta: `${nombre} · Unidad ${unidad}`
+      };
+    }
+    m = /^ecv([a-z0-9]+)u(\d+)$/i.exec(s);
+    if (m) {
+      const label = m[1].toLowerCase(), unidad = Number(m[2]);
+      const nombre = ({ f: "Final" })[label] || label.toUpperCase();
+      return {
+        id: s.toLowerCase(), tipo: "ecv", label, num: 0, unidad,
+        carpeta: "ecv/",
+        nombre: "Evaluación virtual · " + nombre,
+        etiqueta: `${nombre} · Unidad ${unidad}`
+      };
+    }
+    return null;
   }
 
   /** Descarga y lee el CSV de una sesión -> { info, titulo, tituloOk, filas } | null */
