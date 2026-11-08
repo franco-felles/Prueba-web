@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mis quizzes · Aula Virtual</title>
 <!-- Solo docente. Crear, editar, abrir/cerrar y borrar quizzes. Se guardan en el Panel (pestaña "Quiz"). -->
-<script src="../access/aula.js" data-docente data-sin-barra></script>
-<link rel="icon" type="image/png" href="../access/favicon.png">
-<link rel="stylesheet" href="../access/estilo.css">
+<script src="../conexion/aula.js" data-docente data-sin-barra></script>
+<link rel="icon" type="image/png" href="../conexion/img/favicon.png">
+<link rel="stylesheet" href="../conexion/estilo.css">
 <style>
   body { --acc: #5b4bb0; --acc-d: #3d2f86; --acc-bg: #efecfa; }
   .volver { display: inline-flex; gap: 6px; color: var(--ink-2); text-decoration: none; font-size: .85rem; font-weight: 600; margin-bottom: 18px; }
@@ -53,7 +53,7 @@
 </head>
 <body>
   <header class="topbar"><div class="topbar-in">
-    <a class="plate" href="../index.html"><span class="plate-mark"><img src="../access/icono.png" alt=""></span>
+    <a class="plate" href="../index.html"><span class="plate-mark"><img src="../conexion/img/icono.png" alt=""></span>
       <span class="plate-txt"><b>Aula Virtual</b><small>Herramientas Informáticas</small></span></a>
     <div class="who-chip"><i class="dot"></i><span id="quien"></span><button class="btn ghost sm" id="salir" type="button">Salir</button></div>
   </div></header>
@@ -100,7 +100,7 @@ async function vistaLista() {
     };
     const bts = el("div", "bts");
     const ed = el("button", "btn sm ghost", "Editar"); ed.type = "button"; ed.onclick = () => vistaEditor(q.id);
-    const rs = el("a", "btn sm ghost", "Resultados"); rs.href = Aula.url("quiz.html?id=" + q.id);
+    const rs = el("a", "btn sm ghost", "Resultados"); rs.href = Aula.url("eecc/quiz.html?id=" + q.id);
     const bo = el("button", "btn sm ghost peligro", "Borrar"); bo.type = "button";
     bo.onclick = async () => {
       if (!confirm(`¿Borrar "${q.titulo}"? Las notas ya guardadas quedan en la pestaña Resultados del Panel.`)) return;

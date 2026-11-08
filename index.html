@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Aula Virtual · Herramientas Informáticas</title>
-<script src="access/aula.js" data-proteger data-sin-barra></script>
-<link rel="icon" type="image/png" href="access/favicon.png">
-<link rel="apple-touch-icon" href="access/icono.png">
-<link rel="stylesheet" href="access/estilo.css">
+<script src="conexion/aula.js" data-proteger data-sin-barra></script>
+<link rel="icon" type="image/png" href="conexion/img/favicon.png">
+<link rel="apple-touch-icon" href="conexion/img/icono.png">
+<link rel="stylesheet" href="conexion/estilo.css">
 <style>
   :root { --ev: #5b4bb0; --ev-d: #3d2f86; --ev-bg: #efecfa; }
   .bloque { margin-top: 38px; }
@@ -64,7 +64,7 @@
   <header class="topbar">
     <div class="topbar-in">
       <div class="plate">
-        <span class="plate-mark"><img src="access/icono.png" alt=""></span>
+        <span class="plate-mark"><img src="conexion/img/icono.png" alt=""></span>
         <span class="plate-txt"><b>Aula Virtual</b><small>Herramientas Informáticas</small></span>
       </div>
       <div class="who-chip"><i class="dot"></i><span id="quien"></span>
@@ -184,24 +184,22 @@ $("fClave").onsubmit = async e => {
 
   cont.replaceChildren();
   const marca = c => (docente && !c.publicada) ? el("span", "borrador", "NO PUBLICADA") : null;
-  const unidades = [...new Set(r.clases.filter(c => c.tipo === "Clase").map(c => c.unidad))].sort();
+  // Orden real dentro de cada unidad: C1 · C2 · EC1 · C4 · C5 · EC2 · C7 · C8 · EC3  (la EC n ocupa el lugar 3n)
+  const lugar = c => c.tipo === "EC" ? c.n * 3 : c.n;
+  const unidades = [...new Set(r.clases.map(c => Number(c.unidad)))].sort((a, b) => a - b);
   unidades.forEach(u => {
-    const cartas = r.clases.filter(c => c.tipo === "Clase" && c.unidad === u).sort((a, b) => a.n - b.n).map(c => carta({
-      href: "clase.html?id=" + c.id, cls: c.publicada ? "" : "oculta", tipo: "CLASE", id: c.id,
-      num: String(c.n).padStart(2, "0"), sub: c.tema || "Clase " + c.n, go: "Abrir carpeta", extra: marca(c)
-    }));
+    const cartas = r.clases.filter(c => Number(c.unidad) === u).sort((a, b) => lugar(a) - lugar(b)).map(c => c.tipo === "EC"
+      ? carta({ href: "clases/clase.html?id=" + c.id, cls: "ec" + (c.publicada ? "" : " oculta"), tipo: "EVALUACIÓN", id: c.id,
+                num: "EC" + c.n, sub: c.tema || "Evaluación continua " + c.n, go: docente ? "Ver documentos" : "Abrir mi evaluación", extra: marca(c) })
+      : carta({ href: "clases/clase.html?id=" + c.id, cls: c.publicada ? "" : "oculta", tipo: "CLASE", id: c.id,
+                num: String(c.n).padStart(2, "0"), sub: c.tema || "Clase " + c.n, go: "Abrir carpeta", extra: marca(c) }));
     cont.appendChild(bloque("Unidad " + u, cartas));
   });
-  const ecs = r.clases.filter(c => c.tipo === "EC").sort((a, b) => a.n - b.n);
-  if (ecs.length) cont.appendChild(bloque("Evaluaciones continuas", ecs.map(c => carta({
-    href: "clase.html?id=" + c.id, cls: "ec" + (c.publicada ? "" : " oculta"), tipo: "EVALUACIÓN", id: c.id,
-    num: "EC" + c.n, sub: c.tema || "Evaluación continua " + c.n, go: docente ? "Ver documentos" : "Abrir mi evaluación", extra: marca(c)
-  }))));
   if (r.quizzes.length) cont.appendChild(bloque("Evaluaciones virtuales", r.quizzes.map(q => {
     const hechos = (q.rendidos || []).length, todos = (s.alumnos || []).length;
     const listo = !docente && todos && hechos >= todos;
     return carta({
-      href: "quiz.html?id=" + q.id, cls: "ev" + (listo ? " hecha" : "") + (docente && !q.abierto ? " oculta" : ""), tipo: "QUIZ", id: q.npreg + " preg.",
+      href: "eecc/quiz.html?id=" + q.id, cls: "ev" + (listo ? " hecha" : "") + (docente && !q.abierto ? " oculta" : ""), tipo: "QUIZ", id: q.npreg + " preg.",
       num: "Q", sub: q.titulo, go: docente ? "Ver resultados" : listo ? "Ya rendido · ver nota" : "Rendir", nueva: !docente,
       extra: docente && !q.abierto ? el("span", "borrador", "CERRADO") : null
     });

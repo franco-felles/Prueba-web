@@ -2,75 +2,91 @@
 
 Portal de *Herramientas Informáticas*. Los datos (alumnos, clases, copias, enlaces, quizzes y notas) viven en el **Panel Aula Virtual** (Google Sheets + Apps Script, en tu Drive). La web solo muestra lo que el Panel le permite ver a quien inició sesión.
 
-## Cómo encaja todo
+## Estructura
 
 ```
-Google Drive / AULA VIRTUAL/
-  Panel Aula Virtual  ← hoja de control + Apps Script (google/panel.gs + google/api.gs)
-  BIBLIOTECA/         ← semillas reutilizables
-  NOV 2026/           ← carpeta del mes (LISTAS, U1/C01 - Tema/, U2/, EC1..3/)
-
-Web (Vercel)
-  acceso.html         login: alumno con su código · docente con contraseña
-  index.html          portal: unidades, evaluaciones continuas, quizzes
-  clase.html?id=…     cada clase/EC como CARPETA (mi documento, actividades, archivos, enlaces, quiz)
-  quiz.html?id=…      rendir quiz (alumno) / resultados y corrección (docente)
-  docente/quizzes.html  crear y editar quizzes
-  clases/<id>/        complementos HTML de cada clase (ver nomenclatura)
-  config.js           URL del Panel publicado (/exec)
-  access/aula.js      sesión, API, cierre por inactividad
+index.html                  portal (única página en la raíz)
+clases/
+  clase.html                visor de carpeta (sirve para clases y EC: ?id=u1c1 · ?id=ec1u1)
+  u1c1/material/m1c1.html   material 1 de la clase 1 (unidad 1)
+  u1c2/  u1c4/  u1c5/  u1c7/  u1c8/   u2c1/ … u2c8/
+eecc/
+  quiz.html                 evaluación virtual (alumno rinde · docente ve resultados)
+  ec1u1/material/  ec2u1/  ec3u1/   ec1u2/  ec2u2/  ec3u2/
+docente/
+  quizzes.html              crear y editar quizzes
+conexion/
+  acceso.html               login (alumno: código · docente: contraseña)
+  aula.js                   sesión, conexión con el Panel, cierre por inactividad
+  config.js                 URL del Panel publicado (/exec)
+  estilo.css  img/          diseño, logo, icono, ilustración del login
+  materiales.json           índice de materiales (automático)
+sistema/                    no se publica en la web
+  google/panel.gs  api.gs   código del Panel (Apps Script)
+  manifiesto.js             genera conexion/materiales.json
+  plantillas/presentacion.html
+  LEEME.md                  instalación y uso del Panel
 ```
 
-## Nomenclatura: dónde va cada cosa
+## Orden de cada unidad
 
-Los IDs de clase los crea el Panel: `u1c04` = unidad 1, clase 4 · `ec2` = evaluación continua 2.
+`C1 · C2 · EC1 · C4 · C5 · EC2 · C7 · C8 · EC3`: la 3, la 6 y la 9 son evaluaciones continuas.
 
-| Tengo… | Va en… | Aparece en la carpeta de la clase como |
-|---|---|---|
-| Documento que **cada alumno trabaja** (Doc/Sheet, aunque esté vacío) | Drive, carpeta de la clase, nombre que empieza por `SEMILLA` o `profesor` → Panel: **Aula → Generar copias** | **Mi documento** (cada uno ve el suyo) |
-| Presentación, PDF, video, Form **para ver** | Drive, carpeta de la clase (fuera de `ALUMNOS/`) | **Presentaciones y archivos** |
-| Enlace a un Doc/Sheet compartido, web, YouTube, Kahoot… | Panel → pestaña **Enlaces** (`TIPO`: documento, hoja, presentacion, encuesta, video, web, juego, enlace) | **Enlaces** |
-| Página HTML propia (material interactivo) | `clases/<id>/pag-<nombre>.html` | **Actividades** |
-| Juego HTML propio | `clases/<id>/juego-<nombre>.html` | **Juegos** |
-| Quiz de opción múltiple | Web → **Mis quizzes** (vincúlalo a la clase) | **Evaluación virtual** |
+| Sesión | ID | Carpeta del repo | Carpeta de Drive |
+|---|---|---|---|
+| Clase 4, unidad 1 | `u1c4` | `clases/u1c4/material/` | `NOV 2026/U1/C4 - Tema/` |
+| EC 2, unidad 1 | `ec2u1` | `eecc/ec2u1/material/` | `NOV 2026/U1/EC2 - Tema/` |
 
-- Un archivo de Drive cuyo nombre empieza con `_` no se muestra (borradores).
-- En `clases/<id>/` puedes poner imágenes, `.js` o `.css` que usen tus páginas; solo `pag-*` y `juego-*` aparecen como tarjetas.
-- El título de la tarjeta sale de `<meta name="session-title" content="…">` o del `<title>` de la página.
-- Las evaluaciones continuas funcionan igual que una clase: su semilla se copia para cada alumno y cada uno abre **su** documento.
+En el Panel se crean con **Aula → Nueva clase / EC**: `u1 4` o `u1 ec2`.
 
-### Complementos HTML
+## Qué va dónde
 
-Cabecera mínima de una página en `clases/<id>/`:
+**Material de clase** es todo lo que no es un enlace:
+
+| Tengo… | Va en… |
+|---|---|
+| HTML propio: presentación, interactivo, juego, lectura… | `clases/<id>/material/m<#>c<#>.html` (EC: `eecc/<id>/material/m<#>ec<#>.html`) |
+| Imágenes / .js / .css de esos HTML | `…/material/recursos/` |
+| PPT, PDF, video o Form ya hecho | Carpeta de la clase en Drive |
+| Documento que **cada alumno trabaja** (aunque esté vacío) | Drive, archivo que empieza por `SEMILLA` o `profesor` → **Aula → Generar copias** |
+
+**Enlaces** (Doc o Sheet compartido, YouTube, una web, Kahoot…) van en el Panel, pestaña **Enlaces**.
+
+**Quizzes** se crean en la web: **Mis quizzes**, vinculados a la clase o EC.
+
+### Ficha de cada material
+
+El alumno no ve `m1c1`: ve lo que diga la ficha del `<head>`:
 
 ```html
-<script src="../../access/aula.js" data-proteger></script>
+<meta name="material-titulo" content="Partes de la computadora">
+<meta name="material-tipo" content="interactivo">
+<meta name="material-descripcion" content="Explora en 3D cada componente.">
+<script src="../../../conexion/aula.js" data-proteger></script>
 ```
 
-Para un botón "Ir a mi documento" dentro de la página:
+- **Tipos**: `presentacion` · `interactivo` · `juego` · `lectura` · `video` · `practica`.
+- **Orden**: el número después de la `m` (m1, m2, m3…).
+- **Presentaciones en HTML**: copia `sistema/plantillas/presentacion.html`. Se navega con flechas o deslizando, y la tecla F pone pantalla completa.
+- **Botón "Ir a mi documento"** dentro de un material:
+  ```js
+  const docs = await Aula.miDocumento();     // la clase sale de la carpeta del archivo
+  docs.filter(d => d.url).forEach(d => window.open(d.url, "_blank", "noopener"));
+  ```
 
-```js
-const docs = await Aula.miDocumento();          // [{nombre, url}] de quien está conectado
-docs.filter(d => d.url).forEach(d => window.open(d.url, "_blank", "noopener"));
-```
-
-`clases/manifiesto.json` (la lista de complementos) se regenera solo con GitHub Actions al subir cambios en `clases/`. A mano: `node tools/manifiesto.js`.
-
-`biblioteca/` guarda páginas antiguas listas para reutilizar: cópialas a `clases/<id>/`.
+`conexion/materiales.json` se regenera solo con GitHub Actions al subir cambios a `clases/` o `eecc/`. A mano: `node sistema/manifiesto.js`.
 
 ## Accesos
 
-- **Alumno**: escribe su código. Solo entra si en el Panel está **Activo y con grupo**. Si comparte PC, su compañero se agrega desde el portal ("Agregar compañero") y cada uno ve su propio documento.
-- **Docente**: contraseña guardada cifrada en Apps Script (no en la hoja ni en la web). Se cambia desde el portal (**Cambiar contraseña**) o, si la olvidas, en el Panel: **Aula → Contraseña docente**.
-- La sesión vive solo en esa pestaña y se cierra sola tras **20 minutos sin uso** (PC compartidas).
+- **Alumno**: escribe su código. Solo entra si en el Panel está **Activo y con grupo**. Si comparte PC, su compañero se agrega desde el portal y cada uno ve su propio documento.
+- **Docente**: contraseña cifrada en Apps Script. Se cambia desde el portal o, si la olvidas, en el Panel con **Aula → Contraseña docente**.
+- La sesión vive solo en esa pestaña y se cierra tras **20 minutos sin uso**.
 
 ## Quizzes
 
-- Se crean en **Mis quizzes**: preguntas con 2 a 5 alternativas, tema opcional, cuántas mostrar al azar, abierto/cerrado y clase vinculada.
-- Se pueden importar preguntas en el formato del quiz antiguo (`N,TEMA,PREGUNTA,A,B,C,D,E`, correcta con `*`); ej. `biblioteca/quiz-ecvfu2.csv`.
-- El navegador del alumno **nunca recibe las respuestas correctas**: corrige el Panel. Un intento por alumno; detecta cambios de pestaña.
-- Notas en la pestaña **Resultados** del Panel; corrección de nota y reinicio desde la web.
+- Preguntas de 2 a 5 alternativas, cuántas mostrar al azar, abierto/cerrado, clase vinculada.
+- Se pueden importar preguntas con el formato `N,TEMA,PREGUNTA,A,B,C,D,E` (la correcta lleva `*`).
+- El alumno **nunca recibe las respuestas correctas**: corrige el Panel. Hay un solo intento por alumno y se detecta el cambio de pestaña.
+- Las notas quedan en la pestaña **Resultados** del Panel. La corrección de nota y el reinicio se hacen desde la web.
 
-## Instalación
-
-Ver [`google/LEEME.md`](google/LEEME.md).
+Instalación del Panel: [`sistema/LEEME.md`](sistema/LEEME.md).
