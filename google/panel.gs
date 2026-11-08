@@ -12,6 +12,7 @@
      · Nueva clase / EC ............ crea la carpeta y su fila en "Clases"
      · Generar copias .............. copia la semilla de cada clase para cada alumno
      · Actualizar laboratorio ...... recalcula "Comparte con" y el mapa de PCs
+     · Contraseña docente .......... crea o repone tu clave de la web (api.gs)
 
    Estructura en Drive:
      AULA VIRTUAL/                 (carpeta donde está este Panel)
@@ -36,7 +37,7 @@ const CABECERAS = {
 };
 
 const ESTADOS = ["Pendiente", "Activo", "No asiste", "Retirado"];
-const TIPOS_ENLACE = ["enlace", "video", "encuesta", "web", "juego", "presentacion"];
+const TIPOS_ENLACE = ["enlace", "documento", "hoja", "presentacion", "encuesta", "video", "web", "juego"];
 const MESES = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SET", "OCT", "NOV", "DIC"];
 const MESES_LARGOS = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO",
                       "SETIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
@@ -56,6 +57,8 @@ function onOpen() {
     .addSeparator()
     .addItem("Actualizar laboratorio", "actualizarLaboratorio")
     .addItem("Abrir carpeta del mes", "abrirCarpetaMes")
+    .addSeparator()
+    .addItem("Contraseña docente…", "contrasenaDocente")
     .addToUi();
 }
 
@@ -79,6 +82,9 @@ function configurarPanel() {
     estiloCabecera(cfg, 3);
     cfg.setColumnWidth(2, 200); cfg.setColumnWidth(3, 380);
   }
+  // Claves que se agregaron después (no pisa lo que ya escribiste)
+  const existentes = cfg.getRange(1, 1, cfg.getLastRow(), 1).getValues().map(r => r[0]);
+  [["DOCENTE", "Docente", "Tu nombre como aparece en la web"]].forEach(f => { if (existentes.indexOf(f[0]) < 0) cfg.appendRow(f); });
 
   // Tablas
   Object.keys(CABECERAS).forEach(n => {
@@ -200,6 +206,7 @@ function fusionarAlumnos(lotes) {
 
 function ordenarAlumnos() {
   const sh = hoja(HOJA.alumnos);
+  SpreadsheetApp.flush();   // asegura que las filas recién agregadas entren al orden
   if (sh.getLastRow() > 2)
     sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).sort({ column: colDe(sh, "APELLIDOS Y NOMBRES"), ascending: true });
 }

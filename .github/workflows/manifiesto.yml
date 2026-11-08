@@ -1,0 +1,23 @@
+# Regenera clases/manifiesto.json cuando cambia algo en clases/ (por ejemplo, si subes un juego desde la web de GitHub).
+name: manifiesto
+on:
+  push:
+    paths: ["clases/**", "tools/manifiesto.js"]
+permissions:
+  contents: write
+jobs:
+  generar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: node tools/manifiesto.js
+      - run: |
+          if ! git diff --quiet clases/manifiesto.json; then
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            git add clases/manifiesto.json
+            git commit -m "Actualizar manifiesto de clases"
+            git push
+          fi

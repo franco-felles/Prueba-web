@@ -1,151 +1,76 @@
 # aula-virtual
 
-Portal de *Herramientas Informáticas*. Cada persona entra con su código; el portal arma **solo** los botones de clases y evaluaciones según los CSV que existan. Para publicar algo nuevo **solo se sube un CSV** con el nombre correcto.
+Portal de *Herramientas Informáticas*. Los datos (alumnos, clases, copias, enlaces, quizzes y notas) viven en el **Panel Aula Virtual** (Google Sheets + Apps Script, en tu Drive). La web solo muestra lo que el Panel le permite ver a quien inició sesión.
 
-## Estructura
-
-```
-index.html             portal (crea los botones solos). Sin sesión te manda al login
-acceso.html            login
-access/
-  access.csv           quién puede entrar (alumnos + docente)
-  access.js            validación, sesión y guardia de páginas
-  estilo.css           diseño compartido
-  icono.png / favicon.png / login.jpg   logo, icono de pestaña e ilustración del login
-  sesion.html          ÚNICA página de sesión (ver abajo)
-clases/
-  class1u1.html        única clase que es página (modelo 3D de la PC); no lleva CSV
-  class2u1.csv         código + enlace de cada alumno en esa clase
-  class4u1.csv
-  class5u1.csv
-eecc/
-  ec1u1.csv            evaluación continua (mismo formato que los CSV de clase)
-ecv/
-  ecvfu2.csv           banco de preguntas de la evaluación virtual (quiz)
-  examen.html          ÚNICA página de quiz (alumno rinde, docente corrige)
-  config.js            URL de Google Apps Script para guardar resultados
-  appsscript.gs        código del backend (se pega en script.google.com)
-  resultados_ecvfu2.json  resultados (solo si usas servidor.py)
-review/
-  reu1u1.html          repaso de la unidad 1 (página; no lleva CSV)
-servidor.py            servidor local OPCIONAL (solo para probar sin Google)
-```
-
-## Nomenclatura
-
-| Tipo | Nombre | Carpeta | Ejemplo |
-|---|---|---|---|
-| Clase | `class#u#` (clase # de la unidad #) | `clases/` | `class4u1.csv`, `class2u2.csv` |
-| Evaluación continua | `ec#u#` | `eecc/` | `ec1u1.csv`, `ec2u1.csv` |
-| Repaso | `reu#u#` (repaso # de la unidad #) | `review/` | `reu1u1.html`, `reu2u1.html` |
-| Evaluación virtual (quiz) | `ecv<etiqueta>u#` (F = Final, P = Parcial…) | `ecv/` | `ecvfu2.csv` |
-
-La **primera fila** del CSV repite el nombre de la sesión (`class4u1`) y debe coincidir con el nombre del archivo. Segunda fila (encabezados): `N_ORDEN,GRUPO,CODIGO,ALUMNO,ENLACE`. Si el enlace no empieza con `http` (ej. `NO_DISPONIBLE`) se avisa que el documento aún no está disponible.
-
-`access.csv`: `ROL,GRUPO,CODIGO,NOMBRE` (ROL = `alumno` o `docente`).
-
-## Cómo funciona
-
-1. El alumno busca su nombre, escribe su código y entra. El código queda como llave **solo en esa pestaña** (`sessionStorage`; en el laboratorio las PC se comparten). Hay botón **Salir**.
-2. El portal detecta los CSV de `clases/` y `eecc/` y crea un botón por cada uno (agrupados por unidad).
-3. **Alumno**: el portal busca su código en cada CSV y convierte cada botón en un enlace a **su documento**. Al presionarlo, el documento se abre en una **pestaña nueva**, el portal sigue abierto y aparece una **notificación** en pantalla. Si no tiene enlace o no figura en ese CSV, el botón sale deshabilitado ("Aún no disponible" / "No figuras aquí").
-   **Docente**: el botón abre `access/sesion.html?s=<sesión>`:
-   - ve la lista de todos los alumnos de esa clase/evaluación con su enlace (buscador y filtro por grupo; cada nombre abre su documento en pestaña nueva).
-
-`sesion.html` es el único modelo: sirve para cualquier clase o evaluación, no hay que crear HTML por sesión. (Si un alumno entra a `sesion.html?s=...` directamente, lo redirige a su enlace.)
-
-Imágenes: `access/icono.png` (logo de las cabeceras), `access/favicon.png` (icono de pestaña) y `access/login.jpg` (ilustración del login). Se cambian reemplazando el archivo.
-
-## Agregar cosas
-
-| Quiero… | Hago |
-|---|---|
-| Publicar una clase | Subo `clases/class6u1.csv`. El botón aparece solo. |
-| Publicar una EC | Subo `eecc/ec2u1.csv` |
-| Publicar un repaso | Subo `review/reu2u1.html` (copia de `reu1u1.html`; cambia `data-sesion="reu2u1"`) |
-| Clase de otra unidad | `class1u2.csv` |
-| Agregar/quitar un alumno | Edito `access/access.csv` (y los CSV de cada sesión) |
-| Cambiar mi clave de docente | Última fila de `access/access.csv` (`docente`, columna CODIGO) |
-
-Búsqueda automática (en `index.html`): se prueban las unidades de `UNIDADES = [1,2,3,4]` y, en cada una, los números 1, 2, 3… hasta que falten 3 seguidos (`HUECOS`). Si en la consola (F12) ves errores 404, son normales: el portal prueba nombres que aún no existen.
-
-## Evaluación virtual (quiz en plataforma)
-
-Tipo `ecv`: un examen en diapositivas, distinto a las EC (que son enlaces a documentos).
-
-| Archivo | Función |
-|---|---|
-| `ecv/ecvfu2.csv` | Banco de preguntas (más de 10; se muestran 10 al azar) |
-| `ecv/examen.html` | Página única: el alumno rinde, el docente corrige |
-| `ecv/resultados_ecvfu2.json` | Resultados (lo escribe `servidor.py`) |
-
-**Banco de preguntas** (`ecv/ecvfu2.csv`), una pregunta por fila:
+## Cómo encaja todo
 
 ```
-ecvfu2
-N,TEMA,PREGUNTA,A,B,C,D,E
-1,Hojas de cálculo,¿Con qué símbolo comienza toda fórmula?,Igual (=)*,Más (+),Asterisco (*),Diagonal (/),
+Google Drive / AULA VIRTUAL/
+  Panel Aula Virtual  ← hoja de control + Apps Script (google/panel.gs + google/api.gs)
+  BIBLIOTECA/         ← semillas reutilizables
+  NOV 2026/           ← carpeta del mes (LISTAS, U1/C01 - Tema/, U2/, EC1..3/)
+
+Web (Vercel)
+  acceso.html         login: alumno con su código · docente con contraseña
+  index.html          portal: unidades, evaluaciones continuas, quizzes
+  clase.html?id=…     cada clase/EC como CARPETA (mi documento, actividades, archivos, enlaces, quiz)
+  quiz.html?id=…      rendir quiz (alumno) / resultados y corrección (docente)
+  docente/quizzes.html  crear y editar quizzes
+  clases/<id>/        complementos HTML de cada clase (ver nomenclatura)
+  config.js           URL del Panel publicado (/exec)
+  access/aula.js      sesión, API, cierre por inactividad
 ```
 
-- Primera fila: nombre de la sesión (igual al archivo).
-- Encabezados: `N,TEMA,PREGUNTA,A,B,C,D,E`. `TEMA` es opcional.
-- Alternativas de `A` a `E` (usa las que necesites). **La correcta lleva `*` al final** (ej. `Igual (=)*`).
-- Solo una correcta por pregunta. El orden de preguntas y de alternativas se baraja automáticamente.
+## Nomenclatura: dónde va cada cosa
 
-**Resultado por alumno** (clave = código):
+Los IDs de clase los crea el Panel: `u1c04` = unidad 1, clase 4 · `ec2` = evaluación continua 2.
 
-```json
-{
-  "2026D2287": {
-    "aciertos": 8, "total": 10, "hora": "2026-11-03T23:00:00-05:00",
-    "incidentes": 0, "correccion": null,
-    "respuestas": [ { "n": 1, "orden": ["B","A","C"], "elegida": "A", "ok": true } ]
-  }
-}
+| Tengo… | Va en… | Aparece en la carpeta de la clase como |
+|---|---|---|
+| Documento que **cada alumno trabaja** (Doc/Sheet, aunque esté vacío) | Drive, carpeta de la clase, nombre que empieza por `SEMILLA` o `profesor` → Panel: **Aula → Generar copias** | **Mi documento** (cada uno ve el suyo) |
+| Presentación, PDF, video, Form **para ver** | Drive, carpeta de la clase (fuera de `ALUMNOS/`) | **Presentaciones y archivos** |
+| Enlace a un Doc/Sheet compartido, web, YouTube, Kahoot… | Panel → pestaña **Enlaces** (`TIPO`: documento, hoja, presentacion, encuesta, video, web, juego, enlace) | **Enlaces** |
+| Página HTML propia (material interactivo) | `clases/<id>/pag-<nombre>.html` | **Actividades** |
+| Juego HTML propio | `clases/<id>/juego-<nombre>.html` | **Juegos** |
+| Quiz de opción múltiple | Web → **Mis quizzes** (vincúlalo a la clase) | **Evaluación virtual** |
+
+- Un archivo de Drive cuyo nombre empieza con `_` no se muestra (borradores).
+- En `clases/<id>/` puedes poner imágenes, `.js` o `.css` que usen tus páginas; solo `pag-*` y `juego-*` aparecen como tarjetas.
+- El título de la tarjeta sale de `<meta name="session-title" content="…">` o del `<title>` de la página.
+- Las evaluaciones continuas funcionan igual que una clase: su semilla se copia para cada alumno y cada uno abre **su** documento.
+
+### Complementos HTML
+
+Cabecera mínima de una página en `clases/<id>/`:
+
+```html
+<script src="../../access/aula.js" data-proteger></script>
 ```
 
-Solo se guardan códigos y letras (el nombre del alumno sale de `access/access.csv`). Dónde se guarda depende de cómo publiques:
+Para un botón "Ir a mi documento" dentro de la página:
 
-- **En Vercel (lo normal)**: se guarda en **Google Apps Script** (tu cuenta de Google). Ver "Guardar resultados sin servidor propio".
-- **Con `servidor.py` en local**: se guarda en `ecv/resultados_ecvfu2.json`.
+```js
+const docs = await Aula.miDocumento();          // [{nombre, url}] de quien está conectado
+docs.filter(d => d.url).forEach(d => window.open(d.url, "_blank", "noopener"));
+```
 
-**Alumno**: 10 preguntas al azar, alternativas barajadas, sin volver atrás. Detecta cambio de pestaña o minimizado y lo registra (anti-trampa). Al terminar solo ve su nota y "Finalizar todo"; si vuelve a entrar, solo ve su nota.
+`clases/manifiesto.json` (la lista de complementos) se regenera solo con GitHub Actions al subir cambios en `clases/`. A mano: `node tools/manifiesto.js`.
 
-**Docente**: en `ecv/examen.html?s=ecvfu2` ve los alumnos por grupo. Al hacer clic en un nombre: las preguntas que le salieron, aciertos/desaciertos (amarillo = correcta, rojo = fallo), nota, hora e incidentes, botón **Reiniciar evaluación** y un campo de **nota de corrección** (la original sale tachada).
+`biblioteca/` guarda páginas antiguas listas para reutilizar: cópialas a `clases/<id>/`.
 
-**Agregar otra evaluación virtual**: crea `ecv/ecvfu3.csv` (u `ecvpu2.csv` para parcial) y añade su etiqueta en `ECV_LABELS` de `index.html` (ej. `["f", "p"]`).
+## Accesos
 
-## Guardar resultados sin servidor propio (Google Apps Script)
+- **Alumno**: escribe su código. Solo entra si en el Panel está **Activo y con grupo**. Si comparte PC, su compañero se agrega desde el portal ("Agregar compañero") y cada uno ve su propio documento.
+- **Docente**: contraseña guardada cifrada en Apps Script (no en la hoja ni en la web). Se cambia desde el portal (**Cambiar contraseña**) o, si la olvidas, en el Panel: **Aula → Contraseña docente**.
+- La sesión vive solo en esa pestaña y se cierra sola tras **20 minutos sin uso** (PC compartidas).
 
-En Vercel el navegador no puede escribir archivos, así que las notas de las evaluaciones virtuales se guardan en **Google** con un mini-servidor gratuito (Apps Script) y se ven desde la misma página. Se configura **una sola vez** (≈5 minutos):
+## Quizzes
 
-1. Entra a <https://script.google.com> con tu cuenta de Google y pulsa **Nuevo proyecto**.
-2. Borra todo lo que hay y pega el contenido de [`ecv/appsscript.gs`](ecv/appsscript.gs).
-3. Guarda (nombre sugerido: `Resultados Aula Virtual`).
-4. Arriba a la derecha: **Implementar → Nueva implementación → tipo "Aplicación web"**:
-   - Ejecutar como: **Yo** (tu correo).
-   - Quién tiene acceso: **Cualquier persona**.
-   - Pulsa **Implementar** y autoriza los permisos cuando te lo pida.
-5. Copia la **URL de la aplicación web** (termina en `/exec`).
-6. Abre [`ecv/config.js`](ecv/config.js) y pega esa URL entre las comillas:
-   ```js
-   window.CONFIG_ECV_API = "https://script.google.com/macros/s/AKfycb.../exec";
-   ```
-7. Sube el cambio: `git add ecv/config.js && git commit -m "backend resultados" && git push`.
+- Se crean en **Mis quizzes**: preguntas con 2 a 5 alternativas, tema opcional, cuántas mostrar al azar, abierto/cerrado y clase vinculada.
+- Se pueden importar preguntas en el formato del quiz antiguo (`N,TEMA,PREGUNTA,A,B,C,D,E`, correcta con `*`); ej. `biblioteca/quiz-ecvfu2.csv`.
+- El navegador del alumno **nunca recibe las respuestas correctas**: corrige el Panel. Un intento por alumno; detecta cambios de pestaña.
+- Notas en la pestaña **Resultados** del Panel; corrección de nota y reinicio desde la web.
 
-Con eso los alumnos rinden en `web-herramientas-informaticas.vercel.app` y sus notas quedan guardadas en Google; tú las ves desde la pestaña docente desde cualquier PC.
+## Instalación
 
-> Nota: esa URL es "pública" (quien la conozca podría leer o escribir resultados). Para un aula de ofimática no es un problema real; más adelante se puede proteger con una clave.
-
-## ⚠️ Seguridad
-
-Es un sitio estático: **todos los CSV son públicos** para quien conozca su dirección (nombres, códigos y enlaces, incluida la clave del docente). El login evita curiosos, no es seguridad real. Para ocultar la clave del docente, ejecuta en la consola `await Acceso.hash("tu clave")` y pega el resultado (`sha256:...`) en `access.csv`. Si los documentos de Google están como "cualquiera con el enlace: editor", quien consiga un CSV puede abrirlos.
-
-## Probar en local (opcional)
-
-Solo si quieres probar sin Google. `fetch` no funciona con doble clic; desde la carpeta del proyecto:
-
-- Ver el sitio: `python3 -m http.server 8000` → `http://localhost:8000`.
-- Guardar resultados en `ecv/resultados_*.json` (sin Apps Script): `python servidor.py` → `http://localhost:8000`.
-
-Si `ecv/config.js` tiene la URL de Apps Script, esa tiene prioridad y no hace falta `servidor.py`. El nombre de archivo `ecv/ecvfu2.csv` se escribe en minúsculas aunque escribas `ecvFu2`: el portal no distingue mayúsculas.
+Ver [`google/LEEME.md`](google/LEEME.md).

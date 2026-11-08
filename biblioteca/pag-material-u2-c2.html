@@ -2,7 +2,7 @@
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Funciones en hojas de cálculo · Diapositivas</title>
-<script src="../access/access.js" data-proteger data-sin-barra></script>
+<script src="../../access/aula.js" data-proteger data-sin-barra></script>
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);--bg:#f3f5fa;--card:#fff;--tx:#1d2330;--mut:#5b6475;--bd:#d3d8e4;--ok:#1e8e4e;--ko:#c62828;--acc:#2f6fdb;--hl:#fff3a0}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
@@ -230,26 +230,18 @@ $('pv').onclick=()=>go(cur-1);$('nx').onclick=()=>go(cur+1);
 document.addEventListener('keydown',e=>{if(/INPUT|TEXTAREA/.test(e.target.tagName))return;if(e.key==='ArrowRight'&&!$('nx').disabled)go(cur+1);if(e.key==='ArrowLeft')go(cur-1)});
 go(0);
 /* ===== Acceso a "mi documento" =====
-   El nombre de este archivo da la sesión:  material_u2_c2.html  ->  class2u2
-   (unidad 2, clase 2). Se lee clases/class2u2.csv y se busca la fila por CODIGO. */
+   La clase sale de la carpeta donde está este archivo: clases/<id>/pag-....html
+   (Aula.miDocumento pregunta al Panel por el documento de quien inició sesión). */
 (async()=>{
 const btns=[$('sh'),$('goDoc')],av=$('docAviso');
-const f=(location.pathname.split('/').pop()||'').replace(/\.html?$/i,'').toLowerCase();
-const m=/^material_u(\d+)_c(\d+)$/.exec(f),idClase=m?`class${m[2]}u${m[1]}`:f;
-const fallo=t=>{btns.forEach(b=>{b.disabled=true;b.title=t});
-av.hidden=false;av.textContent='⚠️ '+t+' ';const a=document.createElement('a');a.href='../acceso.html';a.textContent='Volver al acceso';av.appendChild(a)};
+const fallo=t=>{btns.forEach(b=>{b.disabled=true;b.title=t});av.hidden=false;av.textContent='⚠️ '+t};
 const ok=(t,fn)=>btns.forEach(b=>{b.disabled=false;b.title=t;b.onclick=fn});
 try{
-await Acceso.listo;
-const s=Acceso.sesion();
-if(!s)return fallo('No se encontró tu código.');
-if(s.rol==='docente')return ok('Ver alumnos y enlaces',()=>{location.href=Acceso.url('access/sesion.html?s='+encodeURIComponent(idClase))});
-const datos=await Acceso.cargarSesion(idClase);
-if(!datos)return fallo('No se pudo abrir la lista de esta clase.');
-const fila=Acceso.buscarFila(datos.filas,s.codigo);
-if(!fila)return fallo('Tu código no figura en esta clase.');
-if(!/^https?:\/\//i.test(fila.link))return fallo('Tu documento aún no está disponible.');
-ok('Ir a mi documento',()=>window.open(fila.link,'_blank','noopener'));
-}catch(e){fallo('No se pudo verificar tu código.')}
+const s=await Aula.listo;
+if(s.rol==='docente')return ok('Ver documentos de los alumnos',()=>{location.href=Aula.url('clase.html?id='+encodeURIComponent(Aula.claseActual()))});
+const docs=(await Aula.miDocumento()).filter(d=>d.url);
+if(!docs.length)return fallo('Tu documento aún no está disponible.');
+ok('Ir a mi documento',()=>docs.forEach(d=>window.open(d.url,'_blank','noopener')));
+}catch(e){fallo(e.message||'No se pudo verificar tu código.')}
 })();
 </script></body></html>

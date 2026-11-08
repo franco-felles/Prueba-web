@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mis quizzes · Aula Virtual</title>
+<!-- Solo docente. Crear, editar, abrir/cerrar y borrar quizzes. Se guardan en el Panel (pestaña "Quiz"). -->
+<script src="../access/aula.js" data-docente data-sin-barra></script>
+<link rel="icon" type="image/png" href="../access/favicon.png">
+<link rel="stylesheet" href="../access/estilo.css">
+<style>
+  body { --acc: #5b4bb0; --acc-d: #3d2f86; --acc-bg: #efecfa; }
+  .volver { display: inline-flex; gap: 6px; color: var(--ink-2); text-decoration: none; font-size: .85rem; font-weight: 600; margin-bottom: 18px; }
+  .cab { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+  .qz { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--acc); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+  .qz .info { flex: 1 1 260px; min-width: 0; }
+  .qz b { display: block; font-size: 1rem; }
+  .qz small { font-family: var(--mono); font-size: .72rem; color: var(--mut); }
+  .qz .bts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .sw { display: inline-flex; align-items: center; gap: 8px; font-size: .82rem; font-weight: 600; cursor: pointer; user-select: none; }
+  .sw input { width: 38px; height: 22px; appearance: none; background: var(--line); border-radius: 999px; position: relative; cursor: pointer; transition: background .15s; margin: 0; }
+  .sw input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .15s; }
+  .sw input:checked { background: var(--moss); }
+  .sw input:checked::after { left: 19px; }
+  .btn.peligro { color: var(--err); border-color: #efc3bf; }
+  .btn.peligro:hover { background: var(--err); color: #fff; border-color: var(--err); }
+
+  /* editor */
+  .conf { display: grid; grid-template-columns: 2fr 1fr 110px; gap: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 4px; margin-bottom: 18px; }
+  .conf .field select, .conf .field input { width: 100%; padding: 13px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); font: inherit; }
+  .conf .full { grid-column: 1 / -1; }
+  @media (max-width: 700px) { .conf { grid-template-columns: 1fr; } }
+  .preg { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+  .preg-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .preg-top .num { font-family: var(--mono); font-weight: 700; color: var(--acc-d); background: var(--acc-bg); border-radius: 8px; padding: 3px 9px; }
+  .preg-top input.tema { flex: 1; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: .82rem; background: var(--paper); color: var(--ink); }
+  .icon-btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; width: 32px; height: 32px; display: grid; place-items: center; color: var(--ink-2); font-size: .9rem; }
+  .icon-btn:hover { border-color: var(--ink); color: var(--ink); }
+  .preg textarea { width: 100%; min-height: 64px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font: inherit; resize: vertical; background: var(--panel); color: var(--ink); }
+  .alt { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .alt input[type=radio] { width: 20px; height: 20px; accent-color: var(--moss); flex: none; }
+  .alt .let { font-family: var(--mono); font-weight: 600; width: 18px; color: var(--mut); }
+  .alt input[type=text] { flex: 1; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); color: var(--ink); }
+  .alt.ok input[type=text] { border-color: var(--moss); background: var(--moss-bg); }
+  .preg .pie { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: .78rem; color: var(--mut); }
+  .barra-guardar { position: sticky; bottom: 0; background: rgba(246,244,238,.95); backdrop-filter: blur(6px); border-top: 1px solid var(--line); padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 18px; }
+  .barra-guardar .estado { flex: 1; font-size: .84rem; color: var(--mut); }
+  details.importar { background: var(--panel); border: 1px dashed var(--line); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; }
+  details.importar summary { cursor: pointer; font-weight: 600; font-size: .9rem; }
+  details.importar textarea { width: 100%; min-height: 120px; margin: 10px 0; padding: 10px; border: 1px solid var(--line); border-radius: 9px; font-family: var(--mono); font-size: .78rem; background: var(--panel); color: var(--ink); }
+  .hint { color: var(--mut); font-size: .82rem; }
+</style>
+</head>
+<body>
+  <header class="topbar"><div class="topbar-in">
+    <a class="plate" href="../index.html"><span class="plate-mark"><img src="../access/icono.png" alt=""></span>
+      <span class="plate-txt"><b>Aula Virtual</b><small>Herramientas Informáticas</small></span></a>
+    <div class="who-chip"><i class="dot"></i><span id="quien"></span><button class="btn ghost sm" id="salir" type="button">Salir</button></div>
+  </div></header>
+  <main class="wrap" id="app"><p class="vacio">Cargando…</p></main>
+
+<script>
+const { el } = Aula;
+const app = document.getElementById("app");
+let clases = [], sucio = false;
+window.addEventListener("beforeunload", e => { if (sucio) { e.preventDefault(); e.returnValue = ""; } });
+
+/* ======================= LISTA ======================= */
+async function vistaLista() {
+  sucio = false;
+  history.replaceState(null, "", location.pathname);
+  app.replaceChildren(el("p", "vacio", "Cargando…"));
+  let r;
+  try { r = await Aula.api("quizLista"); } catch (ex) { app.replaceChildren(el("div", "aviso", ex.message)); return; }
+  clases = r.clases;
+  const volver = el("a", "volver", "← Inicio"); volver.href = Aula.url("index.html");
+  const cab = el("div", "cab"), izq = el("div");
+  izq.append(el("p", "eyebrow", "Docente"), el("h1", "titulo", "Mis quizzes"),
+    el("p", "lede", "Crea evaluaciones de opción múltiple. Solo los quizzes ABIERTOS aparecen a los alumnos. Si los vinculas a una clase, también salen dentro de su carpeta."));
+  const nuevo = el("button", "btn", "+ Nuevo quiz"); nuevo.type = "button"; nuevo.onclick = () => vistaEditor(null);
+  cab.append(izq, nuevo);
+  app.replaceChildren(volver, cab);
+  if (!r.quizzes.length) { app.appendChild(el("p", "vacio", "Aún no tienes quizzes. Crea el primero.")); return; }
+  r.quizzes.forEach(q => {
+    const fila = el("div", "qz"), info = el("div", "info");
+    const cl = clases.find(c => c.id === q.clase);
+    info.append(el("b", "", q.titulo), el("small", "", `${q.npreg} preguntas · ${q.mostrar ? "muestra " + q.mostrar + " al azar" : "muestra todas"} · ${cl ? "en " + cl.id : "sin clase"} · ${q.rindieron} rindieron`));
+    const sw = el("label", "sw"), chk = el("input"); chk.type = "checkbox"; chk.checked = q.abierto;
+    const swt = el("span", "", q.abierto ? "Abierto" : "Cerrado");
+    sw.append(chk, swt);
+    chk.onchange = async () => {
+      chk.disabled = true;
+      try {
+        const d = await Aula.api("quizVer", { id: q.id });
+        await Aula.api("quizGuardar", { quiz: Object.assign({}, d.quiz, { abierto: chk.checked }) });
+        swt.textContent = chk.checked ? "Abierto" : "Cerrado";
+        Aula.toast(chk.checked ? "Quiz abierto" : "Quiz cerrado", chk.checked ? "Los alumnos ya pueden rendirlo." : "Ya no aparece a los alumnos.");
+      } catch (ex) { chk.checked = !chk.checked; Aula.toast("No se pudo cambiar", ex.message, "warn"); }
+      chk.disabled = false;
+    };
+    const bts = el("div", "bts");
+    const ed = el("button", "btn sm ghost", "Editar"); ed.type = "button"; ed.onclick = () => vistaEditor(q.id);
+    const rs = el("a", "btn sm ghost", "Resultados"); rs.href = Aula.url("quiz.html?id=" + q.id);
+    const bo = el("button", "btn sm ghost peligro", "Borrar"); bo.type = "button";
+    bo.onclick = async () => {
+      if (!confirm(`¿Borrar "${q.titulo}"? Las notas ya guardadas quedan en la pestaña Resultados del Panel.`)) return;
+      try { await Aula.api("quizBorrar", { id: q.id }); vistaLista(); } catch (ex) { Aula.toast("No se pudo borrar", ex.message, "warn"); }
+    };
+    bts.append(sw, ed, rs, bo);
+    fila.append(info, bts); app.appendChild(fila);
+  });
+}
+
+/* ======================= EDITOR ======================= */
+const vacia = () => ({ tema: "", texto: "", alts: ["", "", "", ""], correcta: -1 });
+
+/** Formato del quiz antiguo (CSV):  N,TEMA,PREGUNTA,A,B,C,D,E   — la correcta lleva * al final. También acepta tabulaciones (pegado desde Sheets). */
+function importarTexto(texto) {
+  const filas = texto.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const sep = filas.some(l => l.includes("\t")) ? "\t" : (filas.join("").split(";").length > filas.join("").split(",").length ? ";" : ",");
+  const partir = l => { const out = []; let c = "", q = false; for (let i = 0; i < l.length; i++) { const ch = l[i];
+    if (q) { if (ch === '"' && l[i + 1] === '"') { c += '"'; i++; } else if (ch === '"') q = false; else c += ch; }
+    else if (ch === '"') q = true; else if (ch === sep) { out.push(c); c = ""; } else c += ch; } out.push(c); return out.map(x => x.trim()); };
+  const preguntas = [];
+  filas.forEach(l => {
+    const f = partir(l);
+    if (f.length < 5 || /^n$/i.test(f[0]) || /pregunta/i.test(f[2])) return;
+    const alts = [], correctaTxt = [];
+    f.slice(3, 8).forEach(a => { if (!a) return; if (a.endsWith("*")) { correctaTxt.push(alts.length); alts.push(a.slice(0, -1).trim()); } else alts.push(a); });
+    if (alts.length >= 2 && f[2]) preguntas.push({ tema: f[1], texto: f[2], alts, correcta: correctaTxt.length ? correctaTxt[0] : -1 });
+  });
+  return preguntas;
+}
+
+async function vistaEditor(id) {
+  app.replaceChildren(el("p", "vacio", "Cargando…"));
+  let quiz = { id: null, titulo: "", clase: "", mostrar: 0, abierto: false, preguntas: [vacia()] };
+  if (id) {
+    try { const d = await Aula.api("quizVer", { id }); quiz = d.quiz; if (!clases.length) clases = (await Aula.api("quizLista")).clases; }
+    catch (ex) { app.replaceChildren(el("div", "aviso", ex.message)); return; }
+    history.replaceState(null, "", "?editar=" + id);
+  } else if (!clases.length) { try { clases = (await Aula.api("quizLista")).clases; } catch {} }
+  quiz.preguntas = quiz.preguntas.map(p => ({ ...p, alts: p.alts.slice() }));
+  sucio = false;
+
+  const volver = el("a", "volver", "← Mis quizzes"); volver.href = "#"; volver.onclick = e => { e.preventDefault(); if (!sucio || confirm("Hay cambios sin guardar. ¿Salir igual?")) vistaLista(); };
+  const h = el("h1", "titulo", id ? "Editar quiz" : "Nuevo quiz");
+
+  // configuración general
+  const conf = el("div", "conf");
+  const campo = (lab, input, cls) => { const f = el("div", "field " + (cls || "")); const l = el("label", "", lab); f.append(l, input); return f; };
+  const iTit = el("input"); iTit.value = quiz.titulo; iTit.placeholder = "Ej.: EC virtual · Hojas de cálculo";
+  const iCla = el("select"); iCla.append(new Option("— Sin clase (solo en el portal) —", ""));
+  clases.forEach(c => iCla.append(new Option((c.tipo === "EC" ? "EC" + c.n : `U${c.unidad} · Clase ${c.n}`) + (c.tema ? " — " + c.tema : ""), c.id)));
+  iCla.value = quiz.clase || "";
+  const iMos = el("input"); iMos.type = "number"; iMos.min = 0; iMos.value = quiz.mostrar || 0;
+  const sw = el("label", "sw full"), iAb = el("input"); iAb.type = "checkbox"; iAb.checked = !!quiz.abierto;
+  sw.append(iAb, "Abierto (visible para los alumnos)");
+  conf.append(campo("Título", iTit), campo("Vincular a clase", iCla), campo("Mostrar (0 = todas)", iMos), sw,
+    el("p", "hint full", "«Mostrar»: si pones 10 y hay 25 preguntas, cada alumno recibe 10 distintas al azar. Las alternativas siempre se barajan."));
+  [iTit, iCla, iMos, iAb].forEach(x => x.addEventListener("input", () => sucio = true));
+
+  // importar
+  const imp = el("details", "importar"); imp.appendChild(el("summary", "", "Importar preguntas (formato del quiz antiguo o pegado desde Sheets)"));
+  const ta = el("textarea"); ta.placeholder = "N,TEMA,PREGUNTA,A,B,C,D,E\n1,Excel,¿Con qué símbolo empieza una fórmula?,Igual (=)*,Más (+),Asterisco (*),\n\nLa correcta lleva * al final.";
+  const bImp = el("button", "btn sm", "Agregar estas preguntas"); bImp.type = "button";
+  imp.append(el("p", "hint", "Una pregunta por fila: N, TEMA, PREGUNTA y de 2 a 5 alternativas. Marca la correcta con * al final."), ta, bImp);
+  bImp.onclick = () => {
+    const nuevas = importarTexto(ta.value);
+    if (!nuevas.length) return Aula.toast("No se reconoció ninguna pregunta", "Revisa el formato.", "warn");
+    quiz.preguntas = quiz.preguntas.filter(p => p.texto.trim()).concat(nuevas);
+    ta.value = ""; imp.open = false; sucio = true; pintarPreguntas();
+    Aula.toast(nuevas.length + " pregunta(s) agregadas", nuevas.some(p => p.correcta < 0) ? "Algunas no tienen correcta marcada: revísalas." : "");
+  };
+
+  const lista = el("div");
+  const agregar = el("button", "btn ghost", "+ Agregar pregunta"); agregar.type = "button";
+  agregar.onclick = () => { quiz.preguntas.push(vacia()); sucio = true; pintarPreguntas(); lista.lastChild.querySelector("textarea").focus(); };
+
+  const barra = el("div", "barra-guardar"), estado = el("span", "estado");
+  const guardar = el("button", "btn", "Guardar quiz"); guardar.type = "button";
+  barra.append(estado, guardar);
+
+  function pintarPreguntas() {
+    lista.replaceChildren();
+    quiz.preguntas.forEach((p, i) => {
+      const box = el("div", "preg");
+      const top = el("div", "preg-top");
+      const tema = el("input", "tema"); tema.placeholder = "Tema (opcional)"; tema.value = p.tema || "";
+      tema.oninput = () => { p.tema = tema.value; sucio = true; };
+      const sube = el("button", "icon-btn", "↑"); sube.type = "button"; sube.title = "Subir"; sube.disabled = i === 0;
+      sube.onclick = () => { [quiz.preguntas[i - 1], quiz.preguntas[i]] = [quiz.preguntas[i], quiz.preguntas[i - 1]]; sucio = true; pintarPreguntas(); };
+      const baja = el("button", "icon-btn", "↓"); baja.type = "button"; baja.title = "Bajar"; baja.disabled = i === quiz.preguntas.length - 1;
+      baja.onclick = () => { [quiz.preguntas[i + 1], quiz.preguntas[i]] = [quiz.preguntas[i], quiz.preguntas[i + 1]]; sucio = true; pintarPreguntas(); };
+      const borra = el("button", "icon-btn", "✕"); borra.type = "button"; borra.title = "Quitar pregunta";
+      borra.onclick = () => { if (p.texto && !confirm("¿Quitar esta pregunta?")) return; quiz.preguntas.splice(i, 1); sucio = true; pintarPreguntas(); };
+      top.append(el("span", "num", String(i + 1)), tema, sube, baja, borra);
+      const tx = el("textarea"); tx.placeholder = "Escribe la pregunta…"; tx.value = p.texto;
+      tx.oninput = () => { p.texto = tx.value; sucio = true; };
+      box.append(top, tx);
+      p.alts.forEach((a, k) => {
+        const fila = el("div", "alt" + (p.correcta === k ? " ok" : ""));
+        const r = el("input"); r.type = "radio"; r.name = "c" + i; r.checked = p.correcta === k; r.title = "Marcar como correcta";
+        r.onchange = () => { p.correcta = k; sucio = true; pintarPreguntas(); };
+        const t = el("input"); t.type = "text"; t.value = a; t.placeholder = "Alternativa " + "ABCDE"[k];
+        t.oninput = () => { p.alts[k] = t.value; sucio = true; };
+        const q = el("button", "icon-btn", "−"); q.type = "button"; q.title = "Quitar alternativa"; q.disabled = p.alts.length <= 2;
+        q.onclick = () => { p.alts.splice(k, 1); if (p.correcta === k) p.correcta = -1; else if (p.correcta > k) p.correcta--; sucio = true; pintarPreguntas(); };
+        fila.append(r, el("span", "let", "ABCDE"[k]), t, q); box.appendChild(fila);
+      });
+      const pie = el("div", "pie");
+      pie.append(el("span", "", p.correcta >= 0 ? "✓ correcta: " + "ABCDE"[p.correcta] : "⚠ marca la correcta (círculo)"));
+      if (p.alts.length < 5) { const m = el("button", "btn sm ghost", "+ alternativa"); m.type = "button"; m.onclick = () => { p.alts.push(""); sucio = true; pintarPreguntas(); }; pie.appendChild(m); }
+      box.appendChild(pie);
+      lista.appendChild(box);
+    });
+    estado.textContent = quiz.preguntas.length + " pregunta(s)";
+  }
+
+  guardar.onclick = async () => {
+    const preguntas = quiz.preguntas.filter(p => p.texto.trim() || p.alts.some(a => a.trim()))
+      .map(p => {   // quita alternativas vacías y reajusta el índice de la correcta
+        const alts = [], idx = []; p.alts.forEach((a, k) => { if (a.trim()) { idx.push(k); alts.push(a.trim()); } });
+        return { id: p.id, tema: p.tema, texto: p.texto.trim(), alts, correcta: idx.indexOf(p.correcta) };
+      });
+    guardar.disabled = true; estado.textContent = "Guardando…";
+    try {
+      const r = await Aula.api("quizGuardar", { quiz: { id: quiz.id, titulo: iTit.value, clase: iCla.value, mostrar: Number(iMos.value) || 0, abierto: iAb.checked, preguntas } });
+      quiz.id = r.id; sucio = false;
+      history.replaceState(null, "", "?editar=" + r.id);
+      Aula.toast("Quiz guardado", iAb.checked ? "Está abierto: los alumnos ya lo ven." : "Está cerrado: actívalo cuando quieras.");
+      estado.textContent = "Guardado · " + preguntas.length + " pregunta(s)";
+    } catch (ex) { Aula.toast("No se guardó", ex.message, "warn"); estado.textContent = ex.message; }
+    guardar.disabled = false;
+  };
+
+  app.replaceChildren(volver, h, conf, imp, lista, agregar, barra);
+  pintarPreguntas();
+}
+
+(async () => {
+  const s = await Aula.listo;
+  document.getElementById("quien").textContent = Aula.quien(s);
+  document.getElementById("salir").onclick = () => Aula.salir();
+  const ed = new URLSearchParams(location.search).get("editar");
+  ed ? vistaEditor(ed) : vistaLista();
+})();
+</script>
+</body>
+</html>
