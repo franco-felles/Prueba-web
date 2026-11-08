@@ -56,6 +56,7 @@ function onOpen() {
     .addSeparator()
     .addItem("Nueva clase / EC…", "nuevaClase")
     .addItem("Generar copias", "generarCopias")
+    .addItem("Limpiar copias borradas", "limpiarCopias")
     .addSeparator()
     .addItem("Actualizar laboratorio", "actualizarLaboratorio")
     .addItem("Abrir carpeta del mes", "abrirCarpetaMes")
@@ -423,6 +424,22 @@ function generarCopias() {
   aviso(`Copias creadas: ${creadas}` + (resumen.length ? "\n" + resumen.join(" · ") : "") +
         (sinSemilla.length ? "\n\nSin semilla (no se copiaron): " + sinSemilla.join(", ") : "") +
         (cortado ? "\n\n⏱ Se alcanzó el tiempo máximo. Vuelve a pulsar «Generar copias» para continuar." : ""));
+}
+
+/** Quita de Entregas las filas cuyo archivo está en la papelera o ya no existe (la web deja de mostrarlos). */
+function limpiarCopias() {
+  const sh = hoja(HOJA.entregas), t = leerTabla(sh);
+  const borrar = t.filas.filter(f => {
+    if (!f.ARCHIVO_ID) return !f.ENLACE;
+    try { return DriveApp.getFileById(String(f.ARCHIVO_ID)).isTrashed(); }
+    catch (_) { return true; }                      // no existe o no hay acceso
+  }).map(f => f._fila).sort((a, b) => b - a);
+  borrar.forEach(n => sh.deleteRow(n));
+  // Recalcula el conteo de copias por clase
+  const shC = hoja(HOJA.clases), tC = leerTabla(shC), conteo = {};
+  leerTabla(sh).filas.forEach(f => conteo[f.CLASE] = (conteo[f.CLASE] || 0) + 1);
+  tC.filas.forEach(c => escribir(shC, tC, c._fila, { COPIAS: conteo[c.ID] || 0 }));
+  aviso(borrar.length ? `Se quitaron ${borrar.length} copia(s) borradas de Entregas.` : "No hay copias borradas: todo está en orden.");
 }
 
 /* ======================= CARPETAS ======================= */

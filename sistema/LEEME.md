@@ -34,6 +34,7 @@ Pega el código nuevo y luego: **Implementar → Gestionar implementaciones → 
 | Primera clase | `Config → PCS` con las PC de la sede. En `Alumnos`: **GRUPO** (queda *Activo* y numerado) y **PC** (solo el número) |
 | Nueva clase | **Aula → Nueva clase / EC** (`u1 4` o `u1 ec2`) → edita la semilla en su carpeta |
 | Antes de clase | Pon una o varias semillas en la carpeta de la clase (`SEMILLA - Práctica Excel`, `SEMILLA - Informe`…) → **Aula → Generar copias** (solo crea las que faltan; cubre tardíos y semillas nuevas) → marca **PUBLICADA** en `Clases` |
+| Borré copias o semillas en Drive | **Aula → Limpiar copias borradas** (quita de Entregas lo que está en la papelera; la web deja de mostrarlo) |
 | Alumno tardío | Fila nueva en `Alumnos` (código, nombre, grupo) → **Generar copias** |
 
 ## Pestañas
