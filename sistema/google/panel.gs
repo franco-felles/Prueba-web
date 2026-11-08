@@ -12,6 +12,9 @@
      · Nueva clase / EC ............ crea la carpeta y su fila en "Clases"
      · Generar copias .............. copia la semilla de cada clase para cada alumno
      · Actualizar laboratorio ...... recalcula "Comparte con" y el mapa de PCs
+     · Limpiar copias borradas ..... quita de Entregas lo que mandaste a la papelera
+     · Copiado automático .......... cada 15 min crea las copias que falten (solo clases PUBLICADAS)
+     · Actualizar web ahora ........ borra la memoria de la web (lo nuevo se ve al instante)
      · Contraseña docente .......... crea o repone tu clave de la web (api.gs)
 
    Estructura en Drive:
@@ -57,6 +60,8 @@ function onOpen() {
     .addItem("Nueva clase / EC…", "nuevaClase")
     .addItem("Generar copias", "generarCopias")
     .addItem("Limpiar copias borradas", "limpiarCopias")
+    .addItem("Copiado automático (activar / desactivar)", "alternarCopiasAuto")
+    .addItem("Actualizar web ahora", "refrescarWeb")
     .addSeparator()
     .addItem("Actualizar laboratorio", "actualizarLaboratorio")
     .addItem("Abrir carpeta del mes", "abrirCarpetaMes")
@@ -203,6 +208,7 @@ function fusionarAlumnos(lotes) {
   }
   ordenarAlumnos();
   actualizarLaboratorio();
+  invalidarCache();
   aviso(`Leídos ${total} alumnos · ${nuevos} nuevos.` + (avisos.length ? "\n\n⚠ " + avisos.join("\n⚠ ") : "") +
         "\n\nAhora asigna GRUPO (y PC) en la pestaña Alumnos cuando los conozcas.");
 }
@@ -219,6 +225,8 @@ function ordenarAlumnos() {
 /** Al editar Alumnos: asignar grupo activa al alumno y renumera; cambios de PC refrescan el mapa. */
 function onEdit(e) {
   const sh = e.range.getSheet();
+  const MEM = { Alumnos: "alumnos", Clases: "clases", Enlaces: "enlaces", Entregas: "entregas", Quiz: "quiz", Resultados: "res" };
+  if (MEM[sh.getName()]) { try { invalidarCache([MEM[sh.getName()]]); } catch (_) {} }   // la web ve el cambio al instante
   if (sh.getName() !== HOJA.alumnos || e.range.getRow() < 2) return;
   const cGrupo = colDe(sh, "GRUPO"), cPC = colDe(sh, "PC"), cEstado = colDe(sh, "ESTADO");
   const c = e.range.getColumn();
@@ -235,6 +243,7 @@ function onEdit(e) {
     numerarGrupos();
   }
   if ([cGrupo, cPC, cEstado].some(x => e.range.getColumn() <= x && x <= e.range.getLastColumn())) actualizarLaboratorio();
+  try { invalidarCache(["alumnos"]); } catch (_) {}      // número de orden / PC recién calculados
 }
 
 /** Da número de orden dentro de cada grupo (1, 2, 3…) a los activos que aún no tienen. Nunca cambia uno ya dado. */
@@ -340,6 +349,7 @@ function nuevaClase() {
     CARPETA: `=HYPERLINK("${carpeta.getUrl()}","abrir carpeta")`, PUBLICADA: false, COPIAS: 0
   }));
   cl.getRange(cl.getLastRow(), colDe(cl, "PUBLICADA")).insertCheckboxes();
+  invalidarCache(["clases"]);
   aviso(`Creada ${info.id}.\n\n` + (semilla ? "Edita la semilla en su carpeta" : "Pon tu archivo semilla en su carpeta") +
         " y luego usa Aula → Generar copias.");
 }
@@ -371,13 +381,16 @@ function carpetaDeClase(fila) {
 
 /* ======================= COPIAS ======================= */
 
-function generarCopias() {
+/** Crea las copias que falten (una por semilla y alumno activo). soloPublicadas: usado por el copiado automático.
+ *  No muestra ventanas (lo usa también el activador); devuelve un resumen. */
+function generarCopiasNucleo(soloPublicadas) {
   const inicio = Date.now();
   numerarGrupos();
   const alumnos = leerTabla(hoja(HOJA.alumnos)).filas
     .filter(f => f.ESTADO === "Activo" && f.GRUPO && f.N)
     .sort((a, b) => (a.GRUPO + String(a.N).padStart(3, "0")).localeCompare(b.GRUPO + String(b.N).padStart(3, "0")));
-  if (!alumnos.length) return aviso("No hay alumnos Activos con GRUPO asignado.");
+  const r = { creadas: 0, cortado: false, sinSemilla: [], resumen: [], sinAlumnos: !alumnos.length };
+  if (!alumnos.length) return r;
 
   const shE = hoja(HOJA.entregas);
   asegurarCabecera(shE, CABECERAS.Entregas);
@@ -387,43 +400,80 @@ function generarCopias() {
   const yaTiene = (clase, cod, sem, unica) => hechas[clase + "|" + cod + "|" + sem] || (unica && hechas[clase + "|" + cod + "|*"]);
 
   const shC = hoja(HOJA.clases), tC = leerTabla(shC, ["CARPETA"]);
-  let creadas = 0, cortado = false;
-  const sinSemilla = [], resumen = [];
-
   for (const clase of tC.filas) {
+    if (soloPublicadas && clase.PUBLICADA !== true) continue;
     const carpeta = carpetaDeClase(clase);
-    if (!carpeta) { sinSemilla.push(clase.ID + " (sin carpeta)"); continue; }
+    if (!carpeta) { r.sinSemilla.push(clase.ID + " (sin carpeta)"); continue; }
     const semillas = semillasDe(carpeta);
-    if (!semillas.length) { sinSemilla.push(clase.ID); continue; }
+    if (!semillas.length) { r.sinSemilla.push(clase.ID); continue; }
     const destino = subcarpeta(carpeta, "ALUMNOS");
     let n = 0;
     for (const semilla of semillas) {
       const sid = semilla.getId(), titulo = etiquetaSemilla(semilla, clase.ID), tipo = tipoDeMime(semilla.getMimeType());
       for (const a of alumnos) {
         if (yaTiene(clase.ID, a.CODIGO, sid, semillas.length === 1)) continue;
-        if (Date.now() - inicio > LIMITE_MS) { cortado = true; break; }
+        if (Date.now() - inicio > LIMITE_MS) { r.cortado = true; break; }
         const nombre = `${a.GRUPO}-${String(a.N).padStart(2, "0")} - ${a["APELLIDOS Y NOMBRES"]} - ${clase.ID}` + (semillas.length > 1 ? " - " + titulo : "");
         const copia = semilla.makeCopy(nombre, destino);
         copia.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.EDIT);
         shE.appendRow(filaDesde(tE.cab, { CLASE: clase.ID, CODIGO: a.CODIGO, GRUPO: a.GRUPO, N: a.N,
           ALUMNO: a["APELLIDOS Y NOMBRES"], ENLACE: copia.getUrl(), ARCHIVO_ID: copia.getId(), CREADO: new Date(),
           SEMILLA: sid, TITULO: titulo, TIPO: tipo }));
-        hechas[clase.ID + "|" + a.CODIGO + "|" + sid] = true; n++; creadas++;
+        hechas[clase.ID + "|" + a.CODIGO + "|" + sid] = true; n++; r.creadas++;
       }
-      if (cortado) break;
+      if (r.cortado) break;
     }
-    if (n) resumen.push(`${clase.ID}: ${n}`);
-    if (cortado) break;
+    if (n) r.resumen.push(`${clase.ID}: ${n}`);
+    if (r.cortado) break;
   }
+  if (r.creadas) contarCopias();
+  invalidarCache();
+  return r;
+}
 
-  // Conteo de copias por clase
-  const conteo = {};
-  leerTabla(shE).filas.forEach(f => conteo[f.CLASE] = (conteo[f.CLASE] || 0) + 1);
+function generarCopias() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return aviso("Ya se están generando copias (quizá el copiado automático). Intenta en un minuto.");
+  let r;
+  try { r = generarCopiasNucleo(false); } finally { lock.releaseLock(); }
+  if (r.sinAlumnos) return aviso("No hay alumnos Activos con GRUPO asignado.");
+  aviso(`Copias creadas: ${r.creadas}` + (r.resumen.length ? "\n" + r.resumen.join(" · ") : "") +
+        (r.sinSemilla.length ? "\n\nSin semilla (no se copiaron): " + r.sinSemilla.join(", ") : "") +
+        (r.cortado ? "\n\n⏱ Se alcanzó el tiempo máximo. Vuelve a pulsar «Generar copias» para continuar." : ""));
+}
+
+/** Lo ejecuta el activador cada 15 min: copias que falten, SOLO en clases PUBLICADAS
+ *  (así no se copian semillas que aún estás preparando). Deja el resultado en Config → AUTO_COPIAS. */
+function copiasAutomaticas() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return;
+  try {
+    const r = generarCopiasNucleo(true);
+    const hora = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM HH:mm");
+    fijarConfig("AUTO_COPIAS", `${hora} · ${r.creadas} copia(s)` + (r.resumen.length ? " (" + r.resumen.join(", ") + ")" : "") + (r.cortado ? " · continúa en la próxima vuelta" : ""),
+                "Último copiado automático (cada 15 min, solo clases PUBLICADAS)");
+  } finally { lock.releaseLock(); }
+}
+
+function alternarCopiasAuto() {
+  const activos = ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === "copiasAutomaticas");
+  if (activos.length) {
+    activos.forEach(t => ScriptApp.deleteTrigger(t));
+    fijarConfig("AUTO_COPIAS", "desactivado", "Último copiado automático (cada 15 min, solo clases PUBLICADAS)");
+    return aviso("Copiado automático DESACTIVADO. Las copias solo se crean con Aula → Generar copias.");
+  }
+  ScriptApp.newTrigger("copiasAutomaticas").timeBased().everyMinutes(15).create();
+  fijarConfig("AUTO_COPIAS", "activado, esperando la primera vuelta", "Último copiado automático (cada 15 min, solo clases PUBLICADAS)");
+  aviso("Copiado automático ACTIVADO.\n\nCada 15 minutos se crean solas las copias que falten en las clases PUBLICADAS " +
+        "(semillas nuevas o alumnos que activaste). Lo último que hizo queda en Config → AUTO_COPIAS.\n\n" +
+        "Las clases sin publicar no se tocan: prepara la semilla tranquilo y publícala cuando esté lista.");
+}
+
+/** Recalcula la columna COPIAS de la pestaña Clases. */
+function contarCopias() {
+  const shC = hoja(HOJA.clases), tC = leerTabla(shC), conteo = {};
+  leerTabla(hoja(HOJA.entregas)).filas.forEach(f => conteo[f.CLASE] = (conteo[f.CLASE] || 0) + 1);
   tC.filas.forEach(c => escribir(shC, tC, c._fila, { COPIAS: conteo[c.ID] || 0 }));
-
-  aviso(`Copias creadas: ${creadas}` + (resumen.length ? "\n" + resumen.join(" · ") : "") +
-        (sinSemilla.length ? "\n\nSin semilla (no se copiaron): " + sinSemilla.join(", ") : "") +
-        (cortado ? "\n\n⏱ Se alcanzó el tiempo máximo. Vuelve a pulsar «Generar copias» para continuar." : ""));
 }
 
 /** Quita de Entregas las filas cuyo archivo está en la papelera o ya no existe (la web deja de mostrarlos). */
@@ -435,11 +485,26 @@ function limpiarCopias() {
     catch (_) { return true; }                      // no existe o no hay acceso
   }).map(f => f._fila).sort((a, b) => b - a);
   borrar.forEach(n => sh.deleteRow(n));
-  // Recalcula el conteo de copias por clase
-  const shC = hoja(HOJA.clases), tC = leerTabla(shC), conteo = {};
-  leerTabla(sh).filas.forEach(f => conteo[f.CLASE] = (conteo[f.CLASE] || 0) + 1);
-  tC.filas.forEach(c => escribir(shC, tC, c._fila, { COPIAS: conteo[c.ID] || 0 }));
+  contarCopias();
+  invalidarCache();
   aviso(borrar.length ? `Se quitaron ${borrar.length} copia(s) borradas de Entregas.` : "No hay copias borradas: todo está en orden.");
+}
+
+/** Borra la memoria de la web (datos y listas de archivos de Drive): lo nuevo se ve al instante. */
+function refrescarWeb() {
+  invalidarCache();
+  const ids = leerTabla(hoja(HOJA.clases)).filas.filter(f => f.ID).map(f => "mat_" + normId(f.ID));
+  if (ids.length) CacheService.getScriptCache().removeAll(ids);
+  aviso("Listo: la web ya muestra lo último del Panel y de las carpetas de Drive.");
+}
+
+/** Escribe (o crea) una fila CLAVE/VALOR en Config. */
+function fijarConfig(clave, valor, desc) {
+  const sh = hoja(HOJA.config);
+  const claves = sh.getLastRow() ? sh.getRange(1, 1, sh.getLastRow(), 1).getValues().map(r => r[0]) : [];
+  const i = claves.indexOf(clave);
+  if (i >= 0) sh.getRange(i + 1, 2).setValue(valor);
+  else sh.appendRow([clave, valor, desc || ""]);
 }
 
 /* ======================= CARPETAS ======================= */

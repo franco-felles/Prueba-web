@@ -34,6 +34,8 @@ Pega el código nuevo y luego: **Implementar → Gestionar implementaciones → 
 | Primera clase | `Config → PCS` con las PC de la sede. En `Alumnos`: **GRUPO** (queda *Activo* y numerado) y **PC** (solo el número) |
 | Nueva clase | **Aula → Nueva clase / EC** (`u1 4` o `u1 ec2`) → edita la semilla en su carpeta |
 | Antes de clase | Pon una o varias semillas en la carpeta de la clase (`SEMILLA - Práctica Excel`, `SEMILLA - Informe`…) → **Aula → Generar copias** (solo crea las que faltan; cubre tardíos y semillas nuevas) → marca **PUBLICADA** en `Clases` |
+| Quiero que las copias se hagan solas | **Aula → Copiado automático** (una vez). Cada 15 min crea las copias que falten en las clases **PUBLICADAS**. Lo último que hizo: `Config → AUTO_COPIAS` |
+| Subí un archivo a Drive y no aparece | La web guarda la lista de archivos 5 min. Para verlo ya: **Aula → Actualizar web ahora** |
 | Borré copias o semillas en Drive | **Aula → Limpiar copias borradas** (quita de Entregas lo que está en la papelera; la web deja de mostrarlo) |
 | Alumno tardío | Fila nueva en `Alumnos` (código, nombre, grupo) → **Generar copias** |
 
@@ -47,3 +49,10 @@ Pega el código nuevo y luego: **Implementar → Gestionar implementaciones → 
 - **Enlaces**: `CLASE, ORDEN, TIPO, TITULO, URL, PARA` (Todos / G1 / G2).
 - **Quiz** y **Resultados**: los llena la web (Mis quizzes). En Resultados ves todas las notas.
 - **Importar**: plan B si el PDF no se lee (pega el texto).
+
+## Velocidad (memoria)
+
+La web no abre la hoja en cada visita: Google guarda los datos ya preparados por 5 minutos y el navegador del alumno guarda lo último que vio (se muestra al instante y se actualiza solo).
+- Lo que **editas a mano en el Panel** (publicar, enlaces, grupos) se ve al instante: al editar se borra la memoria de esa pestaña.
+- Lo que hace el menú (importar, nueva clase, generar copias, limpiar) también se ve al instante.
+- Lo único que puede tardar hasta 5 min son los **archivos nuevos en carpetas de Drive**. Para forzarlo: **Aula → Actualizar web ahora**.

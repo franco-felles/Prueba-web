@@ -45,6 +45,20 @@ const normId = s => String(s || "").toLowerCase().trim().replace(/([a-z])0+(\d)/
 const normCodigo = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 const cache = () => CacheService.getScriptCache();
 
+/* ---------- memoria de datos ----------
+   Cada pestaña se lee una vez y se guarda ya procesada DS_SEG segundos, así la web no abre la hoja en cada visita.
+   Se borra sola cuando editas el Panel (onEdit) o cuando el script cambia algo (invalidarCache). */
+const DS_SEG = 300;
+const DS = ["alumnos", "clases", "enlaces", "entregas", "quiz", "res"];
+function datos(nombre, leer) {
+  const k = "ds_" + nombre, hit = cache().get(k);
+  if (hit) { try { return JSON.parse(hit); } catch (_) {} }
+  const v = leer();
+  try { cache().put(k, JSON.stringify(v), DS_SEG); } catch (_) {}     // si pasa de 100 KB simplemente no se guarda
+  return v;
+}
+function invalidarCache(nombres) { cache().removeAll((nombres || DS).map(n => "ds_" + n)); }
+
 function nuevoToken(datos) {
   const t = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "");
   cache().put("t_" + t, JSON.stringify(datos), TOKEN_SEG);
@@ -62,7 +76,7 @@ function sesionDe(req, rol) {
   return s;
 }
 
-function alumnosTodos() { return leerTabla(hoja(HOJA.alumnos)).filas.filter(f => f.CODIGO); }
+function alumnosTodos() { return datos("alumnos", () => leerTabla(hoja(HOJA.alumnos)).filas.filter(f => f.CODIGO)); }
 const esActivo = a => a.ESTADO === "Activo" && a.GRUPO;
 const pub = a => ({ codigo: a.CODIGO, nombre: a["APELLIDOS Y NOMBRES"], grupo: a.GRUPO, n: a.N, pc: a.PC });
 
@@ -144,9 +158,10 @@ function contrasenaDocente() {
 /* ======================= PORTAL Y CLASES ======================= */
 
 function clasesTodas() {
-  return leerTabla(hoja(HOJA.clases), ["CARPETA"]).filas.filter(f => f.ID).map(f => ({
-    id: normId(f.ID), tipo: f.TIPO, unidad: f.UNIDAD, n: f.N, tema: f.TEMA, publicada: f.PUBLICADA === true, _fila: f
-  }));
+  return datos("clases", () => leerTabla(hoja(HOJA.clases), ["CARPETA"]).filas.filter(f => f.ID).map(f => ({
+    id: normId(f.ID), tipo: f.TIPO, unidad: f.UNIDAD, n: f.N, tema: f.TEMA, publicada: f.PUBLICADA === true,
+    carpeta: (/\/folders\/([\w-]+)/.exec(f._formulas.CARPETA || "") || [])[1] || ""
+  })));
 }
 const clasePublica = c => ({ id: c.id, tipo: c.tipo, unidad: c.unidad, n: c.n, tema: c.tema, publicada: c.publicada });
 
@@ -186,7 +201,8 @@ function tipoDeMime(m) {
 function materialesDe(c) {
   const clave = "mat_" + c.id, enCache = cache().get(clave);
   if (enCache) return JSON.parse(enCache);
-  const carpeta = carpetaDeClase(c._fila);
+  let carpeta = null;
+  try { carpeta = c.carpeta ? DriveApp.getFolderById(c.carpeta) : null; } catch (_) {}
   const lista = [];
   if (carpeta) {
     const it = carpeta.getFiles();
@@ -198,7 +214,7 @@ function materialesDe(c) {
     }
   }
   lista.sort((a, b) => a.titulo.localeCompare(b.titulo, "es", { numeric: true }));
-  cache().put(clave, JSON.stringify(lista), 120);
+  cache().put(clave, JSON.stringify(lista), 300);    // archivos nuevos en Drive aparecen en ≤ 5 min (o Aula → Actualizar web ahora)
   return lista;
 }
 
@@ -212,14 +228,14 @@ function apiClase(req) {
   const misAlumnos = docente ? [] : s.codigos.map(cod => todos.find(x => x.CODIGO === cod)).filter(Boolean);
   const grupos = misAlumnos.map(a => a.GRUPO);
 
-  const enlaces = leerTabla(hoja(HOJA.enlaces)).filas
+  const enlaces = datos("enlaces", () => leerTabla(hoja(HOJA.enlaces)).filas)
     .filter(f => normId(f.CLASE) === c.id && f.URL)
     .filter(f => docente || !f.PARA || f.PARA === "Todos" || grupos.indexOf(f.PARA) >= 0)
     .sort((a, b) => (Number(a.ORDEN) || 99) - (Number(b.ORDEN) || 99))
     .map(f => ({ titulo: f.TITULO || f.URL, url: f.URL, tipo: f.TIPO || "enlace", para: f.PARA || "Todos" }));
 
   // Cada alumno puede tener varias copias (una por semilla: un Doc y un Sheet, etc.). `url` = la primera, por compatibilidad.
-  const entregas = leerTabla(hoja(HOJA.entregas)).filas.filter(f => normId(f.CLASE) === c.id && f.ENLACE);
+  const entregas = datos("entregas", () => leerTabla(hoja(HOJA.entregas)).filas).filter(f => normId(f.CLASE) === c.id && f.ENLACE);
   const conArchivos = a => {
     const archivos = entregas.filter(x => x.CODIGO === a.CODIGO)
       .map(x => ({ titulo: x.TITULO || "Mi documento", tipo: x.TIPO || "documento", url: x.ENLACE }))
@@ -241,19 +257,23 @@ function tablaFija(nombre, cab) {
   if (sh.getLastRow() === 0) { sh.getRange(1, 1, 1, cab.length).setValues([cab]); estiloCabecera(sh, cab.length); }
   return sh;
 }
-function quizzesTodos() {
-  return leerTabla(tablaFija("Quiz", CAB_QUIZ)).filas.filter(f => f.ID).map(f => {
+function quizzesTodos(fresco) {
+  const leer = () => leerTabla(tablaFija("Quiz", CAB_QUIZ)).filas.filter(f => f.ID).map(f => {
     let preguntas = []; try { preguntas = JSON.parse(f.PREGUNTAS || "[]"); } catch (_) {}
     return { id: String(f.ID), titulo: f.TITULO, clase: normId(f.CLASE), mostrar: Number(f.MOSTRAR) || 0,
              abierto: f.ABIERTO === true || f.ABIERTO === "TRUE", npreg: preguntas.length, preguntas, _fila: f._fila };
   });
+  return fresco ? leer() : datos("quiz", leer);
 }
-function quizDe(id) {
-  const q = quizzesTodos().find(x => x.id === String(id || ""));
+function quizDe(id, fresco) {
+  const q = quizzesTodos(fresco).find(x => x.id === String(id || ""));
   if (!q) throw new Error("No existe ese quiz.");
   return q;
 }
-function resultadosTodos() { return leerTabla(tablaFija("Resultados", CAB_RES)).filas.filter(f => f.QUIZ); }
+function resultadosTodos(fresco) {
+  const leer = () => leerTabla(tablaFija("Resultados", CAB_RES)).filas.filter(f => f.QUIZ);
+  return fresco ? leer() : datos("res", leer);
+}
 const resPublico = r => {
   let detalle = []; try { detalle = JSON.parse(r.DETALLE || "[]"); } catch (_) {}
   return { codigo: r.CODIGO, alumno: r.ALUMNO, grupo: r.GRUPO, aciertos: r.ACIERTOS, total: r.TOTAL, nota: r.NOTA,
@@ -301,14 +321,16 @@ function apiQuizGuardar(req) {
     const existente = t.filas.find(f => f.ID === id);
     if (existente) escribir(sh, t, existente._fila, fila);
     else sh.appendRow(filaDesde(t.cab, fila));
+    invalidarCache(["quiz"]);
     return { id };
   } finally { lock.releaseLock(); }
 }
 
 function apiQuizBorrar(req) {
   sesionDe(req, "docente");
-  const q = quizDe(req.id);
+  const q = quizDe(req.id, true);
   tablaFija("Quiz", CAB_QUIZ).deleteRow(q._fila);
+  invalidarCache(["quiz"]);
   return {};
 }
 
@@ -353,11 +375,12 @@ function apiQuizEnviar(req) {
 
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {
-    if (resultadosTodos().some(r => r.QUIZ === q.id && r.CODIGO === a.CODIGO)) throw new Error("Ya rendiste este quiz.");
+    if (resultadosTodos(true).some(r => r.QUIZ === q.id && r.CODIGO === a.CODIGO)) throw new Error("Ya rendiste este quiz.");
     const sh = tablaFija("Resultados", CAB_RES), t = leerTabla(sh);
     sh.appendRow(filaDesde(t.cab, { QUIZ: q.id, CODIGO: a.CODIGO, ALUMNO: a["APELLIDOS Y NOMBRES"], GRUPO: a.GRUPO,
       ACIERTOS: aciertos, TOTAL: total, NOTA: nota, CORRECCION: "", INCIDENTES: Number(req.incidentes) || 0,
       HORA: new Date(), DETALLE: JSON.stringify(detalle) }));
+    invalidarCache(["res"]);
   } finally { lock.releaseLock(); }
   cache().remove(`ex_${req.token}_${q.id}_${a.CODIGO}`);
   return { aciertos, total, nota };
@@ -370,6 +393,7 @@ function apiQuizCorregir(req) {
   if (!f) throw new Error("No hay resultado para ese alumno.");
   const v = req.correccion === null || req.correccion === "" ? "" : Math.max(0, Math.min(20, Number(req.correccion)));
   escribir(sh, t, f._fila, { CORRECCION: v });
+  invalidarCache(["res"]);
   return {};
 }
 
@@ -381,6 +405,7 @@ function apiQuizReiniciar(req) {
     const sh = tablaFija("Resultados", CAB_RES), t = leerTabla(sh);
     t.filas.filter(r => r.QUIZ === req.id && codigos.indexOf(r.CODIGO) >= 0)
       .map(r => r._fila).sort((a, b) => b - a).forEach(n => sh.deleteRow(n));
+    invalidarCache(["res"]);
   } finally { lock.releaseLock(); }
   return {};
 }

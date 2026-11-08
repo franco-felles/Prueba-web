@@ -51,6 +51,7 @@
   function guardar(s) { s.uso = Date.now(); sessionStorage.setItem(CLAVE, JSON.stringify(s)); }
   function salir(motivo) {
     sessionStorage.removeItem(CLAVE);
+    borrarMemoria();
     location.replace(url("conexion/acceso.html") + (motivo ? "?m=" + encodeURIComponent(motivo) : ""));
   }
   function irALogin() {
@@ -92,6 +93,37 @@
     }
     if (s) guardar(s);
     return j;
+  }
+
+  /* ---------- memoria en el navegador (solo esta pestaña; se borra al Salir) ----------
+     apiRapida muestra al instante lo último que se cargó y luego lo reemplaza por lo fresco.
+     precargar pide los datos de antemano (ej. al pasar el mouse por una clase). */
+  const MEM = "aula-mem:";
+  const claveMem = (accion, datos) => MEM + accion + ":" + JSON.stringify(datos || {});
+  const leerMem = k => { try { return JSON.parse(sessionStorage.getItem(k)); } catch { return null; } };
+  const escribirMem = (k, v) => { try { sessionStorage.setItem(k, JSON.stringify(v)); } catch {} };
+  function borrarMemoria() {
+    try { Object.keys(sessionStorage).filter(k => k.startsWith(MEM)).forEach(k => sessionStorage.removeItem(k)); } catch {}
+  }
+  const enCamino = {};
+  function pedir(accion, datos) {
+    const k = claveMem(accion, datos);
+    if (!enCamino[k]) enCamino[k] = api(accion, datos)
+      .then(r => { escribirMem(k, r); return r; })
+      .finally(() => setTimeout(() => delete enCamino[k], 0));
+    return enCamino[k];
+  }
+  /** alRecibir(datos, desdeMemoria) se llama 1 o 2 veces. Si no hay memoria y falla, lanza el error. */
+  async function apiRapida(accion, datos, alRecibir) {
+    const viejo = leerMem(claveMem(accion, datos));
+    if (viejo) alRecibir(viejo, true);
+    try {
+      const nuevo = await pedir(accion, datos);
+      if (!viejo || JSON.stringify(viejo) !== JSON.stringify(nuevo)) alRecibir(nuevo, false);
+    } catch (e) { if (!viejo) throw e; }
+  }
+  function precargar(accion, datos) {
+    if (!leerMem(claveMem(accion, datos))) pedir(accion, datos).catch(() => {});
   }
 
   /* ---------- interfaz compartida ---------- */
@@ -157,7 +189,7 @@
 
   /* ---------- guardia ---------- */
   const proteger = script.hasAttribute("data-proteger") || script.hasAttribute("data-docente");
-  const API = { RAIZ, url, api, sesion, guardar, salir, irALogin, destinoTrasLogin, el, norm, nombreBonito, toast, barra, quien, abrirInterna, claseActual, miDocumento,
+  const API = { RAIZ, url, api, apiRapida, precargar, borrarMemoria, sesion, guardar, salir, irALogin, destinoTrasLogin, el, norm, nombreBonito, toast, barra, quien, abrirInterna, claseActual, miDocumento,
     esDocente: () => (sesion() || {}).rol === "docente" };
 
   if (proteger) {

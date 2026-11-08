@@ -104,8 +104,10 @@ const ICO = {
   carpeta: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>'
 };
 
-function carta({ href, cls, tipo, id, num, sub, go, extra, nueva }) {
+function carta({ href, cls, tipo, id, num, sub, go, extra, nueva, precarga }) {
   const a = el("a", "carta " + (cls || "")); a.href = href;
+  // Al pasar el mouse (o tocar) se piden los datos de la clase antes del clic: al entrar ya están listos
+  if (precarga) ["pointerenter", "touchstart", "focus"].forEach(ev => a.addEventListener(ev, () => Aula.precargar("clase", { id: precarga }), { once: true, passive: true }));
   const top = el("div", "c-top");
   const t = el("span", "c-tipo"); t.innerHTML = ICO.carpeta; t.append(tipo);
   top.append(t, extra || el("span", "c-id", id));
@@ -142,7 +144,7 @@ function pintarCompanero(s) {
     try {
       const r = await Aula.api("companero", { codigo: inp.value });
       const ses = Aula.sesion(); ses.alumnos = r.alumnos; Aula.guardar(ses);
-      Aula.toast("Compañero agregado", "Ahora en cada clase verán los documentos de ambos.");
+      Aula.borrarMemoria();          // lo guardado era solo de un alumno
       location.reload();
     } catch (ex) { err.textContent = ex.message; b.disabled = false; }
   };
@@ -182,10 +184,14 @@ $("fClave").onsubmit = async e => {
     : "Entra a una clase para ver tu documento, presentaciones, enlaces y actividades.";
 
   const cont = $("contenido");
-  let r;
-  try { r = await Aula.api("portal"); }
-  catch (ex) { cont.replaceChildren(el("div", "aviso", ex.message)); return; }
+  // Muestra al instante lo último cargado (si lo hay) y luego lo actualiza con lo fresco
+  try { await Aula.apiRapida("portal", {}, r => pintarPortal(r, s, docente)); }
+  catch (ex) { cont.replaceChildren(el("div", "aviso", ex.message)); }
+})();
 
+function pintarPortal(r, s, docente) {
+  const cont = $("contenido");
+  $("extra").replaceChildren();
   if (docente) pintarDocente(r);
   else { s.alumnos = r.alumnos; Aula.guardar(s); $("quien").textContent = Aula.quien(s); pintarCompanero(s); }
 
@@ -197,9 +203,9 @@ $("fClave").onsubmit = async e => {
   unidades.forEach(u => {
     const cartas = r.clases.filter(c => Number(c.unidad) === u).sort((a, b) => lugar(a) - lugar(b)).map(c => c.tipo === "EC"
       ? carta({ href: "clases/clase.html?id=" + c.id, cls: "ec" + (c.publicada ? "" : " oculta"), tipo: "EVALUACIÓN", id: c.id,
-                num: "EC" + c.n, sub: c.tema || "Evaluación continua " + c.n, go: docente ? "Ver documentos" : "Abrir mi evaluación", extra: marca(c) })
+                num: "EC" + c.n, sub: c.tema || "Evaluación continua " + c.n, go: docente ? "Ver documentos" : "Abrir mi evaluación", extra: marca(c), precarga: c.id })
       : carta({ href: "clases/clase.html?id=" + c.id, cls: c.publicada ? "" : "oculta", tipo: "CLASE", id: c.id,
-                num: String(c.n).padStart(2, "0"), sub: c.tema || "Clase " + c.n, go: "Abrir carpeta", extra: marca(c) }));
+                num: String(c.n).padStart(2, "0"), sub: c.tema || "Clase " + c.n, go: "Abrir carpeta", extra: marca(c), precarga: c.id }));
     cont.appendChild(bloque("Unidad " + u, cartas));
   });
   if (r.quizzes.length) cont.appendChild(bloque("Evaluaciones virtuales", r.quizzes.map(q => {
@@ -214,7 +220,7 @@ $("fClave").onsubmit = async e => {
   if (!cont.children.length) cont.appendChild(el("p", "vacio", docente
     ? "Aún no hay clases. Créalas en el Panel: Aula → Nueva clase / EC."
     : "Aún no hay clases publicadas."));
-})();
+}
 </script>
 </body>
 </html>

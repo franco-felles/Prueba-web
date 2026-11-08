@@ -199,10 +199,15 @@ async function manifiesto() {
   const cont = $("contenido");
   if (!id) { cont.appendChild(el("div", "aviso", "Falta indicar la clase.")); return; }
 
-  let r, man;
-  try { [r, man] = await Promise.all([Aula.api("clase", { id }), manifiesto()]); }
-  catch (ex) { $("eyebrow").textContent = ""; cont.appendChild(el("div", "aviso", ex.message)); return; }
+  // Muestra al instante lo último cargado o precargado desde el portal, y luego lo fresco
+  const pMan = manifiesto();
+  try { await Aula.apiRapida("clase", { id }, async r => pintarClase(r, await pMan, docente)); }
+  catch (ex) { $("eyebrow").textContent = ""; cont.replaceChildren(el("div", "aviso", ex.message)); }
+})();
 
+function pintarClase(r, man, docente) {
+  const cont = $("contenido");
+  cont.replaceChildren();
   const c = r.clase, esEC = c.tipo === "EC";
   if (esEC) document.body.classList.add("ec");
   $("eyebrow").textContent = `Unidad ${c.unidad} · ` + (esEC ? "Evaluación continua " + c.n : "Clase " + c.n) + (docente && !c.publicada ? " · NO PUBLICADA" : "");
@@ -231,7 +236,7 @@ async function manifiesto() {
   if (!cont.children.length) cont.appendChild(el("p", "vacio", docente
     ? "Esta carpeta está vacía. Agrega una semilla o archivos en su carpeta de Drive, enlaces en el Panel o material en " + (esEC ? "eecc/" : "clases/") + c.id + "/material/."
     : "Esta clase aún no tiene materiales."));
-})();
+}
 </script>
 </body>
 </html>
