@@ -41,7 +41,10 @@
 
   .acciones { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
   .compa { margin-top: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; max-width: 520px; }
+  .compa { margin-top: 14px; background: none; border: 0; padding: 0; max-width: 520px; }
+  .compa .chips { align-items: center; margin-top: 0; }
   .compa form { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .compa form[hidden] { display: none; }
   .compa input { flex: 1 1 180px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; font-family: var(--mono); text-transform: uppercase; background: var(--panel); color: var(--ink); }
   .compa .err { color: var(--err); font-size: .84rem; margin: 8px 0 0; min-height: 1.2em; }
   .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
@@ -120,15 +123,20 @@ function bloque(titulo, cartas) {
   s.append(h, g); return s;
 }
 
+/* Línea discreta: quién está conectado + botón "+ Compañero" que despliega el campo solo si se usa (PC compartida). */
 function pintarCompanero(s) {
   const caja = el("div", "compa");
-  caja.append(el("b", "", "¿Compartes computadora?"));
-  caja.append(el("div", "hint", "Tu compañero puede agregarse aquí con su código y verá sus propios documentos."));
   const chips = el("div", "chips");
   (s.alumnos || []).forEach(a => { const c = el("span", "chip", Aula.nombreBonito(a.nombre)); c.appendChild(el("small", "", a.grupo + (a.pc ? " · PC " + a.pc : ""))); chips.appendChild(c); });
-  const f = el("form"); const inp = el("input"); inp.placeholder = "Código del compañero"; inp.required = true;
-  const b = el("button", "btn sm", "Agregar compañero"); const err = el("div", "err");
+  const f = el("form"); f.hidden = true;
+  const inp = el("input"); inp.placeholder = "Código del compañero"; inp.required = true;
+  const b = el("button", "btn sm", "Agregar"); const err = el("div", "err"); err.hidden = true;
   f.append(inp, b);
+  if ((s.alumnos || []).length < 3) {
+    const abrir = el("button", "btn ghost sm", "+ Compañero"); abrir.type = "button"; abrir.title = "¿Comparten computadora? Agrega a tu compañero con su código";
+    abrir.onclick = () => { f.hidden = !f.hidden; err.hidden = f.hidden; if (!f.hidden) inp.focus(); };
+    chips.appendChild(abrir);
+  }
   f.onsubmit = async e => {
     e.preventDefault(); b.disabled = true; err.textContent = "";
     try {
@@ -138,8 +146,7 @@ function pintarCompanero(s) {
       location.reload();
     } catch (ex) { err.textContent = ex.message; b.disabled = false; }
   };
-  caja.append(chips);
-  if ((s.alumnos || []).length < 3) caja.append(f, err);
+  caja.append(chips, f, err);
   $("extra").appendChild(caja);
 }
 
