@@ -228,9 +228,16 @@ function pintarClase(r, man, docente) {
   // 3. Enlaces (pestaña Enlaces del Panel)
   if (r.enlaces.length) cont.appendChild(carpeta("link", "Enlaces", grid(r.enlaces.map(e => ({ ...e, titulo: e.titulo + (docente && e.para !== "Todos" ? " · solo " + e.para : "") }))), r.enlaces.length));
 
-  // 4. Quizzes vinculados
-  if (r.quizzes.length) cont.appendChild(carpeta("quiz", "Evaluación virtual", grid(r.quizzes.map(q => ({
-    titulo: q.titulo + (docente && !q.abierto ? " (cerrado)" : ""), tipo: "quiz", url: "eecc/quiz.html?id=" + q.id, interna: true
+  // 4. Quizzes asignados a esta clase / EC (se crean en Mis quizzes)
+  const nAl = (Aula.sesion().alumnos || []).length;
+  const estadoQuiz = q => {
+    if (docente) return q.oculto ? " · oculto" : !q.abierto ? " · cerrado" : " · abierto";
+    const hecho = nAl && (q.rendidos || []).length >= nAl;
+    return hecho ? " · ✓ rendido" : !q.abierto ? " · cerrado" : "";
+  };
+  if (r.quizzes.length) cont.appendChild(carpeta("quiz", esEC ? "Evaluación virtual" : "Quiz de la clase", grid(r.quizzes.map(q => ({
+    titulo: q.titulo + estadoQuiz(q), tipo: "quiz", url: "eecc/quiz.html?id=" + q.id, interna: true,
+    descripcion: q.npreg + " preguntas" + (q.repetir ? " · puedes repetirlo" : "")
   }))), r.quizzes.length));
 
   if (!cont.children.length) cont.appendChild(el("p", "vacio", docente

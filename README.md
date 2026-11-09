@@ -84,9 +84,11 @@ El alumno no ve `m1c1`: ve lo que diga la ficha del `<head>`:
 
 ## Quizzes
 
-- Preguntas de 2 a 5 alternativas, cuántas mostrar al azar, abierto/cerrado, clase vinculada.
-- Se pueden importar preguntas con el formato `N,TEMA,PREGUNTA,A,B,C,D,E` (la correcta lleva `*`).
-- El alumno **nunca recibe las respuestas correctas**: corrige el Panel. Hay un solo intento por alumno y se detecta el cambio de pestaña.
-- Las notas quedan en la pestaña **Resultados** del Panel. La corrección de nota y el reinicio se hacen desde la web.
+- Cada quiz es una **EC virtual** (EC1–EC3 de una unidad, sale dentro de la carpeta de esa EC) o un **quiz de clase** (sale dentro de la carpeta de la clase). Sin clase, sale en el inicio.
+- Estado: **Oculto** (no lo ven) · **Cerrado** (lo ven, no pueden rendirlo, sí ven su nota) · **Abierto**. Se cambia desde la lista, sin entrar al editor.
+- Opciones por quiz: **repetir** (se queda la nota más alta), **ver su puntaje** al terminar (por defecto sí), **ver sus errores** con la respuesta correcta (por defecto no).
+- Preguntas de 2 a 5 alternativas y cuántas mostrar al azar. Se pueden importar con el formato `N,TEMA,PREGUNTA,A,B,C,D,E` (la correcta lleva `*`).
+- El alumno **nunca recibe las respuestas correctas** mientras rinde: corrige el Panel. Se detecta el cambio de pestaña.
+- Las notas quedan en la pestaña **Resultados** del Panel y se pueden **descargar en CSV (Excel)** desde la página de resultados. La corrección de nota y el reinicio se hacen desde la web.
 
 Instalación del Panel: [`sistema/LEEME.md`](sistema/LEEME.md).

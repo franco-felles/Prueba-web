@@ -101,6 +101,9 @@
   .opciones { display: grid; gap: 10px; }
   button.opcion { width: 100%; text-align: left; padding: 13px 15px; border: 1.5px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 12px; font: inherit; font-size: .95rem; transition: border-color .15s, background .15s; }
   button.opcion:hover { border-color: var(--acc); background: var(--acc-bg); }
+  .otra-vez { font-size: .85rem; color: var(--acc-d); background: var(--acc-bg); border-radius: 10px; padding: 10px 12px; margin-top: 12px; }
+  .mut { color: var(--mut); font-size: .85rem; }
+  .tarjeta .btn.ghost { margin-top: 10px; }
   .alerta { position: fixed; top: 76px; left: 50%; transform: translateX(-50%); z-index: 120; display: none; max-width: 90vw; background: #7d211b; color: #fff; padding: 10px 16px; border-radius: 12px; font-size: .85rem; box-shadow: 0 12px 30px rgba(16,35,28,.3); }
   .alerta.on { display: block; animation: sube .3s ease both; }
 </style>
@@ -153,7 +156,10 @@ function inicio(alumno, r) {
   const c = el("div", "centrado anim"), t = el("div", "tarjeta");
   const b = el("button", "btn block", "Comenzar"); b.type = "button";
   t.append(el("p", "eyebrow", Aula.nombreBonito(alumno.nombre)), el("h1", "", r.titulo),
-    el("p", "", `Tendrás ${r.preguntas.length} preguntas. No se puede volver atrás.`),
+    el("p", "", `Tendrás ${r.preguntas.length} preguntas. No se puede volver atrás.`));
+  if (r.previo) t.append(el("div", "otra-vez", "Ya lo rendiste" + (r.previo.puntaje ? ` (nota ${r.previo.nota})` : "") +
+    ` · este es tu intento ${r.previo.intentos + 1}. Se queda tu nota más alta.`));
+  t.append(
     el("div", "advertencia", "⚠️ El quiz detecta si cambias de pestaña o minimizas la ventana. Esos eventos quedan registrados y se informan a tu docente."), b);
   b.onclick = () => rendir(alumno, r);
   c.appendChild(t); app.replaceChildren(c);
@@ -208,13 +214,26 @@ function rendir(alumno, r) {
   pintar();
 }
 
+/** r: { puntaje, errores, nota?, aciertos?, total?, mejor?, intentos, revision?, repetir? }
+    (el Panel solo manda lo que el docente permite ver) */
 function mostrarNota(alumno, titulo, r, previa) {
   const c = el("div", "centrado anim"), t = el("div", "tarjeta");
   const ic = el("div", "icono-ok"); ic.innerHTML = ICO_OK;
-  const nota = r.correccion != null && r.correccion !== "" ? r.correccion : r.nota;
-  const big = el("div", "nota-big", String(nota)); big.appendChild(el("small", "", "sobre 20"));
-  t.append(ic, el("p", "eyebrow", Aula.nombreBonito(alumno.nombre)), el("h1", "", previa ? "Ya rendiste este quiz" : "Quiz terminado"), big,
-           el("p", "", `Acertaste ${r.aciertos} de ${r.total} preguntas.`));
+  t.append(ic, el("p", "eyebrow", Aula.nombreBonito(alumno.nombre)),
+    el("h1", "", previa ? "Ya rendiste este quiz" : r.puntaje === false ? "Respuestas enviadas" : "Quiz terminado"));
+  if (r.puntaje !== false) {
+    const big = el("div", "nota-big", String(r.nota)); big.appendChild(el("small", "", "sobre 20"));
+    t.append(big, el("p", "", `Acertaste ${r.aciertos} de ${r.total} preguntas.`));
+    if (r.mejor != null) t.append(el("p", "", `Tu nota más alta sigue siendo ${r.mejor}.`));
+  } else t.append(el("p", "", "Tu docente revisará tu nota."));
+  if (r.intentos > 1) t.append(el("p", "mut", `Intentos: ${r.intentos}`));
+  if (r.revision && r.revision.length) {
+    const v = el("button", "btn block ghost", "Ver mis respuestas"); v.type = "button";
+    v.onclick = () => revision(alumno, titulo, r, previa); t.appendChild(v);
+  }
+  if (r.repetir) {
+    const o = el("button", "btn block ghost", "Intentar de nuevo"); o.type = "button"; o.onclick = () => abrir(alumno); t.appendChild(o);
+  }
   const s = Aula.sesion();
   const b = el("button", "btn block", (s.alumnos || []).length > 1 ? "Volver (que rinda el otro)" : "Finalizar"); b.type = "button";
   b.onclick = () => {
@@ -224,6 +243,29 @@ function mostrarNota(alumno, titulo, r, previa) {
   };
   t.appendChild(b);
   c.appendChild(t); app.replaceChildren(c);
+}
+
+function revision(alumno, titulo, r, previa) {
+  const box = el("div", "quiz");
+  const bien = r.revision.filter(p => p.ok).length;
+  box.append(el("p", "eyebrow", Aula.nombreBonito(alumno.nombre) + " · " + titulo), el("h1", "pregunta", "Tus respuestas"),
+    el("p", "mut", `${bien} bien · ${r.revision.length - bien} mal. Amarillo = respuesta correcta, rojo = tu error.`));
+  r.revision.forEach((p, i) => {
+    const pq = el("div", "pregunta-det" + (p.ok ? " ok" : " fallo"));
+    pq.appendChild(el("div", "pregunta-det-q", `${i + 1}. ${p.texto}`));
+    const ops = el("div", "opciones-det");
+    p.opciones.forEach(o => {
+      const x = el("div", "opcion-det" + (o.correcta ? " correcta" : "") + (o.elegida && !o.correcta ? " mal" : ""), o.texto);
+      if (o.elegida) x.prepend(el("span", "marca", o.correcta ? "✓" : "✗"));
+      ops.appendChild(x);
+    });
+    if (!p.opciones.some(o => o.elegida)) ops.appendChild(el("div", "mut", "(sin responder)"));
+    pq.appendChild(ops); box.appendChild(pq);
+  });
+  const b = el("button", "btn block", "Volver"); b.type = "button"; b.style.marginTop = "14px";
+  b.onclick = () => mostrarNota(alumno, titulo, r, previa);
+  box.appendChild(b);
+  app.replaceChildren(box); scrollTo(0, 0);
 }
 
 /* ======================= DOCENTE ======================= */
@@ -239,9 +281,12 @@ async function vistaDocente() {
 
   const volver = el("a", "volver", "← Mis quizzes"); volver.href = Aula.url("docente/quizzes.html");
   const cab = el("div", "cab anim"), izq = el("div");
-  const editar = el("a", "btn sm ghost", "Editar preguntas"); editar.href = Aula.url("docente/quizzes.html?editar=" + quiz.id);
-  izq.append(el("p", "eyebrow", "Quiz · resultados" + (quiz.abierto ? "" : " · CERRADO")), el("h1", "titulo", quiz.titulo),
-    el("p", "lede", "Clic en un alumno: sus preguntas (amarillo = correcta, rojo = su error), nota, hora e incidentes. Puedes corregir la nota o reiniciar su intento."), editar);
+  const editar = el("a", "btn sm ghost", "Editar quiz"); editar.href = Aula.url("docente/quizzes.html?editar=" + quiz.id);
+  const csv = el("button", "btn sm ghost", "Descargar resultados (Excel)"); csv.type = "button"; csv.onclick = () => descargarCSV();
+  const bts = el("div", "tools"); bts.style.marginTop = "10px"; bts.append(editar, csv);
+  const estado = quiz.oculto ? " · OCULTO" : quiz.abierto ? " · ABIERTO" : " · CERRADO";
+  izq.append(el("p", "eyebrow", "Quiz · resultados" + estado), el("h1", "titulo", quiz.titulo),
+    el("p", "lede", "Clic en un alumno: sus preguntas (amarillo = correcta, rojo = su error), nota, hora e incidentes. Puedes corregir la nota o reiniciar su intento."), bts);
   const stats = el("div", "stats");
   const stat = (b, t) => { const x = el("div", "stat"); x.append(el("b", "", b), t); return x; };
   stats.append(stat(String(d.resultados.length), "rindieron"), stat(String(alumnos.length), "activos"), stat(String(quiz.mostrar || quiz.preguntas.length), "preguntas c/u"));
@@ -287,6 +332,7 @@ async function vistaDocente() {
     if (r.correccion != null) { meta.append(el("span", "tachada", String(r.nota))); const n = el("span", "nota", String(r.correccion)); n.appendChild(el("small", "", "corrección")); meta.append(n); }
     else { const n = el("span", "nota", String(r.nota)); n.appendChild(el("small", "", "sobre 20")); meta.append(n); }
     meta.append(el("span", "aciertos", `${r.aciertos}/${r.total} correctas`), el("span", "hora", "🕒 " + fmtHora(r.hora)));
+    if (r.intentos > 1) meta.append(el("span", "aciertos", `↻ ${r.intentos} intentos (nota más alta)`));
     if (r.incidentes) meta.append(el("span", "incid", "⚠️ " + r.incidentes + " incidente(s)"));
     card.append(top, meta);
     (r.detalle || []).forEach((resp, i) => {
@@ -318,6 +364,22 @@ async function vistaDocente() {
     re.onclick = () => reiniciar([sel], Aula.nombreBonito(a.nombre));
     acc.append(corr, re); card.appendChild(acc);
     det.appendChild(card); det.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /** CSV con ; y BOM: Excel en español lo abre directo, con tildes y columnas bien separadas. */
+  function descargarCSV() {
+    const esc = v => { v = v == null ? "" : String(v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    const filas = [["GRUPO", "N", "CODIGO", "ALUMNO", "NOTA", "NOTA ORIGINAL", "ACIERTOS", "TOTAL", "INTENTOS", "INCIDENTES", "HORA"]];
+    alumnos.slice().sort((a, b) => String(a.grupo).localeCompare(String(b.grupo)) || (a.n || 0) - (b.n || 0)).forEach(a => {
+      const r = res[a.codigo];
+      filas.push([a.grupo, a.n, a.codigo, Aula.nombreBonito(a.nombre), r ? nota(r) : "", r ? r.nota : "", r ? r.aciertos : "", r ? r.total : "",
+        r ? r.intentos : "", r ? r.incidentes : "", r ? fmtHora(r.hora) : "no rindió"]);
+    });
+    const texto = "﻿" + filas.map(f => f.map(esc).join(";")).join("\r\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([texto], { type: "text/csv;charset=utf-8" }));
+    a.download = (quiz.titulo || "quiz").replace(/[\\/:*?"<>|]+/g, "-") + " - resultados.csv";
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
 
   async function reiniciar(codigos, quien) {

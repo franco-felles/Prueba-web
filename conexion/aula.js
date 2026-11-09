@@ -105,6 +105,10 @@
   function borrarMemoria() {
     try { Object.keys(sessionStorage).filter(k => k.startsWith(MEM)).forEach(k => sessionStorage.removeItem(k)); } catch {}
   }
+  /** Olvida lo guardado de ciertas acciones (ej. tras guardar un quiz): Aula.olvidar("quizLista", "portal") */
+  function olvidar(...acciones) {
+    try { Object.keys(sessionStorage).filter(k => acciones.some(a => k.startsWith(MEM + a + ":"))).forEach(k => sessionStorage.removeItem(k)); } catch {}
+  }
   const enCamino = {};
   function pedir(accion, datos) {
     const k = claveMem(accion, datos);
@@ -189,7 +193,7 @@
 
   /* ---------- guardia ---------- */
   const proteger = script.hasAttribute("data-proteger") || script.hasAttribute("data-docente");
-  const API = { RAIZ, url, api, apiRapida, precargar, borrarMemoria, sesion, guardar, salir, irALogin, destinoTrasLogin, el, norm, nombreBonito, toast, barra, quien, abrirInterna, claseActual, miDocumento,
+  const API = { RAIZ, url, api, apiRapida, precargar, borrarMemoria, olvidar, sesion, guardar, salir, irALogin, destinoTrasLogin, el, norm, nombreBonito, toast, barra, quien, abrirInterna, claseActual, miDocumento,
     esDocente: () => (sesion() || {}).rol === "docente" };
 
   if (proteger) {

@@ -16,8 +16,8 @@
    ========================================================== */
 
 const TOKEN_SEG = 6 * 60 * 60;
-const CAB_QUIZ = ["ID", "TITULO", "CLASE", "MOSTRAR", "ABIERTO", "NPREG", "PREGUNTAS", "ACTUALIZADO"];
-const CAB_RES = ["QUIZ", "CODIGO", "ALUMNO", "GRUPO", "ACIERTOS", "TOTAL", "NOTA", "CORRECCION", "INCIDENTES", "HORA", "DETALLE"];
+const CAB_QUIZ = ["ID", "TITULO", "CLASE", "MOSTRAR", "ABIERTO", "NPREG", "PREGUNTAS", "ACTUALIZADO", "OCULTO", "REPETIR", "PUNTAJE", "ERRORES"];
+const CAB_RES = ["QUIZ", "CODIGO", "ALUMNO", "GRUPO", "ACIERTOS", "TOTAL", "NOTA", "CORRECCION", "INCIDENTES", "HORA", "DETALLE", "INTENTOS"];
 
 function doGet() { return salida({ ok: true, app: "Aula Virtual" }); }
 
@@ -34,7 +34,7 @@ function doPost(e) {
 const ACCIONES = {
   login: apiLogin, loginDocente: apiLoginDocente, companero: apiCompanero, cambiarClave: apiCambiarClave,
   portal: apiPortal, clase: apiClase,
-  quizLista: apiQuizLista, quizVer: apiQuizVer, quizGuardar: apiQuizGuardar, quizBorrar: apiQuizBorrar,
+  quizLista: apiQuizLista, quizVer: apiQuizVer, quizGuardar: apiQuizGuardar, quizOpciones: apiQuizOpciones, quizBorrar: apiQuizBorrar,
   quizRendir: apiQuizRendir, quizEnviar: apiQuizEnviar, quizCorregir: apiQuizCorregir, quizReiniciar: apiQuizReiniciar
 };
 
@@ -169,19 +169,18 @@ function apiPortal(req) {
   const s = sesionDe(req);
   const docente = s.rol === "docente";
   const clases = clasesTodas().filter(c => docente || c.publicada).map(clasePublica);
-  const quizzes = quizzesTodos().filter(q => docente || q.abierto);
   const res = docente ? [] : resultadosTodos();
-  const out = {
-    clases,
-    quizzes: quizzes.map(q => ({
-      id: q.id, titulo: q.titulo, clase: q.clase, abierto: q.abierto, npreg: q.npreg,
-      rendidos: docente ? undefined : s.codigos.filter(c => res.some(r => r.QUIZ === q.id && r.CODIGO === c))
-    }))
-  };
+  const out = { clases, quizzes: quizzesTodos().filter(q => docente || !q.oculto).map(q => quizParaLista(q, s, res)) };
   if (docente) out.panel = SpreadsheetApp.getActive().getUrl();
   else { const todos = alumnosTodos(); out.alumnos = s.codigos.map(c => pub(todos.find(x => x.CODIGO === c))); }
   return out;
 }
+
+/** Quiz tal como sale en el portal o en una clase. Al alumno: quiénes de la sesión ya lo rindieron. */
+const quizParaLista = (q, s, res) => ({
+  id: q.id, titulo: q.titulo, clase: q.clase, abierto: q.abierto, oculto: q.oculto, repetir: q.repetir, npreg: q.npreg,
+  rendidos: s.rol === "docente" ? undefined : s.codigos.filter(c => res.some(r => r.QUIZ === q.id && r.CODIGO === c))
+});
 
 const TIPO_MIME = {
   "application/vnd.google-apps.presentation": "presentacion", "application/vnd.google-apps.document": "documento",
@@ -244,27 +243,43 @@ function apiClase(req) {
   };
   const docs = (docente ? todos.filter(esActivo) : misAlumnos).map(conArchivos);
 
-  const quizzes = quizzesTodos().filter(q => q.clase === c.id && (docente || q.abierto))
-    .map(q => ({ id: q.id, titulo: q.titulo, abierto: q.abierto, npreg: q.npreg }));
+  const res = docente ? [] : resultadosTodos();
+  const quizzes = quizzesTodos().filter(q => q.clase === c.id && (docente || !q.oculto)).map(q => quizParaLista(q, s, res));
 
   return { clase: clasePublica(c), materiales: materialesDe(c), enlaces, docs, quizzes, haySemilla: entregas.length > 0 };
 }
 
-/* ======================= QUIZ ======================= */
+/* ======================= QUIZ =======================
+   Opciones de cada quiz (columnas de la pestaña Quiz):
+     CLASE    u1c2 = quiz de esa clase · ec1u1 = EC virtual 1 de la unidad 1 · vacío = suelto (sale en el portal)
+     OCULTO   los alumnos no lo ven en ningún lado
+     ABIERTO  acepta respuestas (visible + cerrado = lo ven pero no pueden rendirlo; sí ven su nota)
+     REPETIR  puede rendirlo otra vez (se queda la nota más alta)
+     PUNTAJE  al terminar ve su nota
+     ERRORES  al terminar ve qué respondió bien y mal, y la respuesta correcta */
+
+const SI_NO = (v, def) => v === "" || v === undefined || v === null ? def : (v === true || String(v).toUpperCase() === "TRUE");
 
 function tablaFija(nombre, cab) {
-  const sh = hoja(nombre);
-  if (sh.getLastRow() === 0) { sh.getRange(1, 1, 1, cab.length).setValues([cab]); estiloCabecera(sh, cab.length); }
+  const sh = hoja(nombre), nueva = sh.getLastRow() === 0;
+  asegurarCabecera(sh, cab);                       // agrega solas las columnas nuevas a hojas ya existentes
+  if (nueva) estiloCabecera(sh, cab.length);
   return sh;
 }
 function quizzesTodos(fresco) {
   const leer = () => leerTabla(tablaFija("Quiz", CAB_QUIZ)).filas.filter(f => f.ID).map(f => {
     let preguntas = []; try { preguntas = JSON.parse(f.PREGUNTAS || "[]"); } catch (_) {}
-    return { id: String(f.ID), titulo: f.TITULO, clase: normId(f.CLASE), mostrar: Number(f.MOSTRAR) || 0,
-             abierto: f.ABIERTO === true || f.ABIERTO === "TRUE", npreg: preguntas.length, preguntas, _fila: f._fila };
+    const abierto = SI_NO(f.ABIERTO, false);
+    return { id: String(f.ID), titulo: f.TITULO, clase: normId(f.CLASE), mostrar: Number(f.MOSTRAR) || 0, abierto,
+             oculto: SI_NO(f.OCULTO, !abierto),    // quizzes antiguos: cerrado = oculto, como antes
+             repetir: SI_NO(f.REPETIR, false), puntaje: SI_NO(f.PUNTAJE, true), errores: SI_NO(f.ERRORES, false),
+             npreg: preguntas.length, preguntas, _fila: f._fila };
   });
   return fresco ? leer() : datos("quiz", leer);
 }
+const quizResumen = q => ({ id: q.id, titulo: q.titulo, clase: q.clase, mostrar: q.mostrar, npreg: q.npreg,
+  abierto: q.abierto, oculto: q.oculto, repetir: q.repetir, puntaje: q.puntaje, errores: q.errores });
+
 function quizDe(id, fresco) {
   const q = quizzesTodos(fresco).find(x => x.id === String(id || ""));
   if (!q) throw new Error("No existe ese quiz.");
@@ -274,33 +289,61 @@ function resultadosTodos(fresco) {
   const leer = () => leerTabla(tablaFija("Resultados", CAB_RES)).filas.filter(f => f.QUIZ);
   return fresco ? leer() : datos("res", leer);
 }
-const resPublico = r => {
-  let detalle = []; try { detalle = JSON.parse(r.DETALLE || "[]"); } catch (_) {}
-  return { codigo: r.CODIGO, alumno: r.ALUMNO, grupo: r.GRUPO, aciertos: r.ACIERTOS, total: r.TOTAL, nota: r.NOTA,
-           correccion: r.CORRECCION === "" ? null : r.CORRECCION, incidentes: r.INCIDENTES, hora: r.HORA, detalle };
-};
+const leerDetalle = r => { try { return JSON.parse(r.DETALLE || "[]"); } catch (_) { return []; } };
+const resPublico = r => ({ codigo: r.CODIGO, alumno: r.ALUMNO, grupo: r.GRUPO, aciertos: r.ACIERTOS, total: r.TOTAL, nota: r.NOTA,
+  correccion: r.CORRECCION === "" ? null : r.CORRECCION, incidentes: r.INCIDENTES, hora: r.HORA,
+  intentos: Number(r.INTENTOS) || 1, detalle: leerDetalle(r) });
+
+/** Lo que el ALUMNO puede ver de un intento, según las opciones del quiz. */
+function revisionDe(detalle, q) {
+  const porId = {}; q.preguntas.forEach(p => porId[p.id] = p);
+  return detalle.map(d => {
+    const p = porId[d.id]; if (!p) return null;
+    const orden = (d.orden && d.orden.length ? d.orden : p.alts.map((_, k) => k)).filter(k => p.alts[k] !== undefined);
+    return { texto: p.texto, tema: p.tema, ok: d.ok,
+             opciones: orden.map(k => ({ texto: p.alts[k], correcta: k === p.correcta, elegida: k === d.elegida })) };
+  }).filter(Boolean);
+}
+function paraAlumno(q, intento) {
+  const out = { intentos: intento.intentos || 1, puntaje: q.puntaje, errores: q.errores };
+  if (q.puntaje) Object.assign(out, { aciertos: intento.aciertos, total: intento.total,
+    nota: intento.correccion != null && intento.correccion !== "" ? intento.correccion : intento.nota });
+  if (q.errores) out.revision = revisionDe(intento.detalle || [], q);
+  return out;
+}
+
+/** Escribe una fila entera de una sola vez (mucho más rápido que celda por celda). Conserva las columnas no indicadas. */
+function escribirFila(sh, t, nFila, cambios) {
+  const orig = t.filas.find(f => f._fila === nFila) || {};
+  const fila = t.cab.map(c => c in cambios ? cambios[c] : (orig[c] === undefined ? "" : orig[c]));
+  sh.getRange(nFila, 1, 1, t.cab.length).setValues([fila]);
+}
 
 function apiQuizLista(req) {
   sesionDe(req, "docente");
   const res = resultadosTodos();
-  return { quizzes: quizzesTodos().map(q => ({ id: q.id, titulo: q.titulo, clase: q.clase, mostrar: q.mostrar, abierto: q.abierto,
-    npreg: q.npreg, rindieron: res.filter(r => r.QUIZ === q.id).length })),
-    clases: clasesTodas().map(clasePublica) };
+  return { quizzes: quizzesTodos().map(q => Object.assign(quizResumen(q), { rindieron: res.filter(r => r.QUIZ === q.id).length })),
+           clases: clasesTodas().map(clasePublica) };
 }
 
 function apiQuizVer(req) {
   sesionDe(req, "docente");
   const q = quizDe(req.id);
-  return { quiz: { id: q.id, titulo: q.titulo, clase: q.clase, mostrar: q.mostrar, abierto: q.abierto, preguntas: q.preguntas },
+  return { quiz: Object.assign(quizResumen(q), { preguntas: q.preguntas }),
            resultados: resultadosTodos().filter(r => r.QUIZ === q.id).map(resPublico),
            alumnos: alumnosTodos().filter(esActivo).map(pub) };
+}
+
+function filaQuiz(d, id, preguntas) {
+  return { ID: id, TITULO: String(d.titulo || "").trim(), CLASE: normId(d.clase), MOSTRAR: Math.max(0, Number(d.mostrar) || 0),
+           ABIERTO: !!d.abierto && !d.oculto, OCULTO: !!d.oculto, REPETIR: !!d.repetir, PUNTAJE: d.puntaje !== false, ERRORES: !!d.errores,
+           NPREG: preguntas.length, PREGUNTAS: JSON.stringify(preguntas), ACTUALIZADO: new Date() };
 }
 
 function apiQuizGuardar(req) {
   sesionDe(req, "docente");
   const d = req.quiz || {};
-  const titulo = String(d.titulo || "").trim();
-  if (!titulo) throw new Error("Ponle un título al quiz.");
+  if (!String(d.titulo || "").trim()) throw new Error("Ponle un título al quiz.");
   const preguntas = (d.preguntas || []).map((p, i) => {
     const alts = (p.alts || []).map(a => String(a || "").trim()).filter(Boolean);
     const texto = String(p.texto || "").trim();
@@ -315,22 +358,46 @@ function apiQuizGuardar(req) {
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {
     const sh = tablaFija("Quiz", CAB_QUIZ), t = leerTabla(sh);
-    const id = d.id || "qz" + Date.now().toString(36);
-    const fila = { ID: id, TITULO: titulo, CLASE: normId(d.clase), MOSTRAR: Math.max(0, Number(d.mostrar) || 0),
-                   ABIERTO: !!d.abierto, NPREG: preguntas.length, PREGUNTAS: JSON.stringify(preguntas), ACTUALIZADO: new Date() };
-    const existente = t.filas.find(f => f.ID === id);
-    if (existente) escribir(sh, t, existente._fila, fila);
+    const id = d.id || "qz" + Date.now().toString(36) + Utilities.getUuid().slice(0, 4);
+    const fila = filaQuiz(d, id, preguntas);
+    const existente = t.filas.find(f => String(f.ID) === id);
+    if (existente) escribirFila(sh, t, existente._fila, fila);
     else sh.appendRow(filaDesde(t.cab, fila));
     invalidarCache(["quiz"]);
     return { id };
   } finally { lock.releaseLock(); }
 }
 
+/** Cambia solo las opciones (oculto/abierto/repetir/puntaje/errores) sin reenviar las preguntas: 1 llamada. */
+function apiQuizOpciones(req) {
+  sesionDe(req, "docente");
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const sh = tablaFija("Quiz", CAB_QUIZ), t = leerTabla(sh);
+    const f = t.filas.find(x => String(x.ID) === String(req.id || ""));
+    if (!f) throw new Error("No existe ese quiz.");
+    const o = req.opciones || {}, cambios = { ACTUALIZADO: new Date() };
+    if ("oculto" in o) { cambios.OCULTO = !!o.oculto; if (o.oculto) cambios.ABIERTO = false; }
+    if ("abierto" in o) { cambios.ABIERTO = !!o.abierto; if (o.abierto) cambios.OCULTO = false; }
+    ["repetir", "puntaje", "errores"].forEach(k => { if (k in o) cambios[k.toUpperCase()] = !!o[k]; });
+    escribirFila(sh, t, f._fila, cambios);
+    invalidarCache(["quiz"]);
+  } finally { lock.releaseLock(); }
+  return { quiz: quizResumen(quizDe(req.id, true)) };
+}
+
 function apiQuizBorrar(req) {
   sesionDe(req, "docente");
-  const q = quizDe(req.id, true);
-  tablaFija("Quiz", CAB_QUIZ).deleteRow(q._fila);
-  invalidarCache(["quiz"]);
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const q = quizDe(req.id, true);
+    tablaFija("Quiz", CAB_QUIZ).deleteRow(q._fila);
+    if (req.conResultados) {
+      const sh = tablaFija("Resultados", CAB_RES);
+      leerTabla(sh).filas.filter(r => r.QUIZ === q.id).map(r => r._fila).sort((a, b) => b - a).forEach(n => sh.deleteRow(n));
+    }
+    invalidarCache(["quiz", "res"]);
+  } finally { lock.releaseLock(); }
   return {};
 }
 
@@ -346,22 +413,25 @@ function apiQuizRendir(req) {
   const s = sesionDe(req, "alumno");
   const a = alumnoDeSesion(s, req.codigo);
   const q = quizDe(req.id);
+  if (q.oculto) throw new Error("Este quiz no está disponible.");
+  const info = { titulo: q.titulo, repetir: q.repetir, puntaje: q.puntaje, errores: q.errores };
   const previo = resultadosTodos().find(r => r.QUIZ === q.id && r.CODIGO === a.CODIGO);
-  if (previo) return { yaRendido: resPublico(previo), titulo: q.titulo };
+  const prev = previo ? paraAlumno(q, resPublico(previo)) : null;
+  if (prev && (!q.repetir || !q.abierto)) return Object.assign(info, { yaRendido: prev, abierto: q.abierto });
   if (!q.abierto) throw new Error("Este quiz está cerrado.");
   const total = q.mostrar > 0 ? Math.min(q.mostrar, q.preguntas.length) : q.preguntas.length;
   const elegidas = barajar(q.preguntas).slice(0, total);
   cache().put(`ex_${req.token}_${q.id}_${a.CODIGO}`, JSON.stringify(elegidas.map(p => p.id)), TOKEN_SEG);
-  return { titulo: q.titulo, preguntas: elegidas.map(p => ({
+  return Object.assign(info, { previo: prev, preguntas: elegidas.map(p => ({
     id: p.id, tema: p.tema, texto: p.texto, opciones: barajar(p.alts.map((t, i) => ({ i, texto: t })))
-  })) };
+  })) });
 }
 
 function apiQuizEnviar(req) {
   const s = sesionDe(req, "alumno");
   const a = alumnoDeSesion(s, req.codigo);
   const q = quizDe(req.id);
-  const raw = cache().get(`ex_${req.token}_${q.id}_${a.CODIGO}`);
+  const clave = `ex_${req.token}_${q.id}_${a.CODIGO}`, raw = cache().get(clave);
   if (!raw) throw new Error("El intento expiró. Vuelve a abrir el quiz.");
   const ids = JSON.parse(raw);
   const porId = {}; q.preguntas.forEach(p => porId[p.id] = p);
@@ -372,18 +442,31 @@ function apiQuizEnviar(req) {
   });
   const aciertos = detalle.filter(d => d.ok).length, total = ids.length;
   const nota = Math.round(aciertos / total * 200) / 10;
+  const incidentes = Number(req.incidentes) || 0;
+  let intentos = 1, mejor = null;
 
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {
-    if (resultadosTodos(true).some(r => r.QUIZ === q.id && r.CODIGO === a.CODIGO)) throw new Error("Ya rendiste este quiz.");
     const sh = tablaFija("Resultados", CAB_RES), t = leerTabla(sh);
-    sh.appendRow(filaDesde(t.cab, { QUIZ: q.id, CODIGO: a.CODIGO, ALUMNO: a["APELLIDOS Y NOMBRES"], GRUPO: a.GRUPO,
-      ACIERTOS: aciertos, TOTAL: total, NOTA: nota, CORRECCION: "", INCIDENTES: Number(req.incidentes) || 0,
-      HORA: new Date(), DETALLE: JSON.stringify(detalle) }));
+    const previo = t.filas.find(r => r.QUIZ === q.id && r.CODIGO === a.CODIGO);
+    const intento = { ACIERTOS: aciertos, TOTAL: total, NOTA: nota, HORA: new Date(), DETALLE: JSON.stringify(detalle) };
+    if (previo) {
+      if (!q.repetir) throw new Error("Ya rendiste este quiz.");
+      intentos = (Number(previo.INTENTOS) || 1) + 1;
+      const cambios = { INTENTOS: intentos, INCIDENTES: (Number(previo.INCIDENTES) || 0) + incidentes };
+      if (nota >= Number(previo.NOTA)) Object.assign(cambios, intento);          // se queda la nota más alta
+      else mejor = Number(previo.NOTA);
+      escribirFila(sh, t, previo._fila, cambios);
+    } else {
+      sh.appendRow(filaDesde(t.cab, Object.assign({ QUIZ: q.id, CODIGO: a.CODIGO, ALUMNO: a["APELLIDOS Y NOMBRES"], GRUPO: a.GRUPO,
+        CORRECCION: "", INCIDENTES: incidentes, INTENTOS: 1 }, intento)));
+    }
     invalidarCache(["res"]);
   } finally { lock.releaseLock(); }
-  cache().remove(`ex_${req.token}_${q.id}_${a.CODIGO}`);
-  return { aciertos, total, nota };
+  cache().remove(clave);
+  const out = paraAlumno(q, { aciertos, total, nota, intentos, detalle });
+  if (q.puntaje && mejor != null) out.mejor = mejor;
+  return Object.assign(out, { repetir: q.repetir && q.abierto });
 }
 
 function apiQuizCorregir(req) {
