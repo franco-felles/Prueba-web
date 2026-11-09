@@ -201,7 +201,17 @@ async function manifiesto() {
 
   // Muestra al instante lo último cargado o precargado desde el portal, y luego lo fresco
   const pMan = manifiesto();
-  try { await Aula.apiRapida("clase", { id }, async r => pintarClase(r, await pMan, docente)); }
+  // Alumno: pinta YA con los datos públicos (datos.json) y luego completa lo personal (su documento) con el Panel
+  let real = false;
+  if (!docente) Promise.all([Aula.publico(), pMan]).then(([p, man]) => {
+    const c = p && p.clases.find(x => x.id === Aula.idNorm(id));
+    if (!c || real) return;
+    const grupos = (s.alumnos || []).map(a => a.grupo);
+    pintarClase({ provisional: true, clase: c, materiales: p.materiales[c.id] || [], docs: [], haySemilla: c.conCopias,
+      enlaces: (p.enlaces[c.id] || []).filter(e => !e.para || e.para === "Todos" || grupos.includes(e.para)),
+      quizzes: p.quizzes.filter(q => q.clase === c.id).map(q => Object.assign({}, q, { rendidos: undefined })) }, man, docente);
+  });
+  try { await Aula.apiRapida("clase", { id }, async r => { real = true; pintarClase(r, await pMan, docente); }); }
   catch (ex) { $("eyebrow").textContent = ""; cont.replaceChildren(el("div", "aviso", ex.message)); }
 })();
 
@@ -216,6 +226,7 @@ function pintarClase(r, man, docente) {
 
   // 1. Mi documento / documentos de los alumnos
   if (docente) cont.appendChild(carpeta("users", "Documentos de los alumnos", listaDocente(r.docs), r.docs.filter(d => d.url).length + "/" + r.docs.length));
+  else if (r.provisional && r.haySemilla) cont.appendChild(carpeta("doc", esEC ? "Mi evaluación" : "Mi documento", el("p", "vacio", "Buscando tu documento…")));
   else if (r.haySemilla || r.docs.some(d => d.url)) cont.appendChild(carpeta("doc", esEC ? "Mi evaluación" : "Mi documento", miDocumento(r.docs, esEC)));
 
   // 2. Material de clase: HTML del repo (material/m#…) y luego los archivos de la carpeta de Drive

@@ -130,6 +130,18 @@
     if (!leerMem(claveMem(accion, datos))) pedir(accion, datos).catch(() => {});
   }
 
+  /* ---------- datos públicos (Web rápida) ----------
+     conexion/datos.json lo escribe el Panel en GitHub: clases publicadas, enlaces, materiales y quizzes visibles.
+     Se lee como un archivo más (instantáneo) para pintar la página mientras el Panel responde lo personal.
+     Si no existe o falla, devuelve null y todo funciona como antes. */
+  let pPublico = null;
+  function publico() {
+    if (!pPublico) pPublico = fetch(url("conexion/datos.json"), { cache: "no-cache" })
+      .then(r => r.ok ? r.json() : null).then(d => d && d.v === 1 && Array.isArray(d.clases) ? d : null).catch(() => null);
+    return pPublico;
+  }
+  const idNorm = s => String(s || "").toLowerCase().trim().replace(/([a-z])0+(\d)/g, "$1$2");
+
   /* ---------- interfaz compartida ---------- */
   function toast(titulo, texto, tipo) {
     let caja = document.getElementById("toasts");
@@ -193,7 +205,7 @@
 
   /* ---------- guardia ---------- */
   const proteger = script.hasAttribute("data-proteger") || script.hasAttribute("data-docente");
-  const API = { RAIZ, url, api, apiRapida, precargar, borrarMemoria, olvidar, sesion, guardar, salir, irALogin, destinoTrasLogin, el, norm, nombreBonito, toast, barra, quien, abrirInterna, claseActual, miDocumento,
+  const API = { RAIZ, url, api, apiRapida, precargar, borrarMemoria, olvidar, publico, idNorm, sesion, guardar, salir, irALogin, destinoTrasLogin, el, norm, nombreBonito, toast, barra, quien, abrirInterna, claseActual, miDocumento,
     esDocente: () => (sesion() || {}).rol === "docente" };
 
   if (proteger) {

@@ -15,6 +15,8 @@
      · Limpiar copias borradas ..... quita de Entregas lo que mandaste a la papelera
      · Copiado automático .......... cada 15 min crea las copias que falten (solo clases PUBLICADAS)
      · Actualizar web ahora ........ borra la memoria de la web (lo nuevo se ve al instante)
+     · Web rápida .................. el Panel escribe conexion/datos.json en GitHub: la web carga al instante
+     · Publicar en la web ahora .... sube esos datos públicos en el momento
      · Contraseña docente .......... crea o repone tu clave de la web (api.gs)
 
    Estructura en Drive:
@@ -64,6 +66,8 @@ function onOpen() {
     .addItem("Limpiar copias borradas", "limpiarCopias")
     .addItem("Copiado automático (activar / desactivar)", "alternarCopiasAuto")
     .addItem("Actualizar web ahora", "refrescarWeb")
+    .addItem("Web rápida (activar / desactivar)", "alternarWebRapida")
+    .addItem("Publicar en la web ahora", "publicarWebAhora")
     .addSeparator()
     .addItem("Actualizar laboratorio", "actualizarLaboratorio")
     .addItem("Abrir carpeta del mes", "abrirCarpetaMes")
@@ -528,13 +532,148 @@ function limpiarCopias() {
   aviso(borrar.length ? `Se quitaron ${borrar.length} copia(s) borradas de Entregas.` : "No hay copias borradas: todo está en orden.");
 }
 
-/** Borra la memoria de la web (datos y listas de archivos de Drive): lo nuevo se ve al instante. */
-function refrescarWeb() {
+/** Borra la memoria del Panel (datos y listas de archivos de Drive). */
+function refrescarMemoria() {
   invalidarCache();
   const ids = leerTabla(hoja(HOJA.clases)).filas.filter(f => f.ID).map(f => "mat_" + normId(f.ID));
   if (ids.length) CacheService.getScriptCache().removeAll(ids);
-  aviso("Listo: la web ya muestra lo último del Panel y de las carpetas de Drive.");
 }
+
+/** Menú: lo nuevo se ve al instante. Si la Web rápida está conectada, también sube los datos públicos. */
+function refrescarWeb() {
+  refrescarMemoria();
+  if (!PropertiesService.getScriptProperties().getProperty("GITHUB_TOKEN")) return aviso("Listo: la web ya muestra lo último del Panel y de las carpetas de Drive.");
+  try { anotarPublicacion(publicarWebNucleo(false)); aviso("Listo: la web ya muestra lo último del Panel y de Drive (la carga instantánea se actualiza en 1 minuto aprox.)."); }
+  catch (e) { aviso("La memoria se borró, pero no se pudo actualizar la Web rápida:\n" + e.message); }
+}
+
+/* ======================= WEB RÁPIDA (datos públicos en GitHub) =======================
+   La web muestra al instante lo que NO es privado, leyendo conexion/datos.json como un archivo más
+   (igual que un sistema local), y luego completa lo personal (mi documento, mis notas) con el Panel.
+
+   datos.json lo escribe este Panel en el repositorio de GitHub (Config → GITHUB_REPO) y Vercel lo publica.
+   Solo lleva: clases PUBLICADAS (tema, unidad), sus enlaces, los archivos de sus carpetas de Drive y los
+   títulos de los quizzes visibles. NUNCA alumnos, códigos, copias, notas ni preguntas.
+
+   · Aula → Web rápida (activar / desactivar): pide el token la primera vez y revisa cada 10 min (de 6:00 a 23:00).
+     Solo sube algo si cambió (si no hay cambios no hace commit ni redeploy).
+   · Aula → Publicar en la web ahora: lo sube en el momento.
+   El token se guarda en Propiedades del script (no en la hoja). Usa un token "fine-grained" con permiso
+   Contents: Read and write SOLO para los repositorios de la web. */
+
+const PUB_RUTA = "conexion/datos.json";
+const PUB_DESC = "Web rápida: última publicación de datos públicos en GitHub";
+
+function datosPublicos() {
+  const clases = clasesTodas().filter(c => c.publicada);
+  const ids = clases.map(c => c.id);
+  const conCopias = {};
+  datos("entregas", () => leerTabla(hoja(HOJA.entregas)).filas).forEach(f => { if (f.ENLACE) conCopias[normId(f.CLASE)] = true; });
+  const enlaces = {}, materiales = {};
+  datos("enlaces", () => leerTabla(hoja(HOJA.enlaces)).filas)
+    .filter(f => f.URL && ids.indexOf(normId(f.CLASE)) >= 0)
+    .sort((a, b) => (Number(a.ORDEN) || 99) - (Number(b.ORDEN) || 99))
+    .forEach(f => (enlaces[normId(f.CLASE)] = enlaces[normId(f.CLASE)] || [])
+      .push({ titulo: f.TITULO || f.URL, url: f.URL, tipo: f.TIPO || "enlace", para: f.PARA || "Todos" }));
+  clases.forEach(c => { const m = materialesDe(c); if (m.length) materiales[c.id] = m; });
+  return {
+    v: 1,
+    clases: clases.map(c => Object.assign(clasePublica(c), { conCopias: !!conCopias[c.id] })),
+    enlaces, materiales,
+    quizzes: quizzesTodos().filter(q => !q.oculto).map(q => ({ id: q.id, titulo: q.titulo, clase: q.clase, abierto: q.abierto,
+      repetir: q.repetir, npreg: q.npreg }))
+  };
+}
+
+const huella = texto => Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, texto, Utilities.Charset.UTF_8));
+
+/** Sube datos.json si cambió. Devuelve un texto con lo que pasó. forzar = subir aunque sea igual. */
+function publicarWebNucleo(forzar) {
+  const props = PropertiesService.getScriptProperties();
+  const token = props.getProperty("GITHUB_TOKEN");
+  const repo = String(valorConfig("GITHUB_REPO") || "").trim().replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "").replace(/\/$/, "");
+  if (!token) throw new Error("Falta conectar con GitHub (Aula → Web rápida).");
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error("Config → GITHUB_REPO debe ser usuario/repositorio, por ejemplo franco-felles/aula-virtual.");
+  const contenido = datosPublicos();
+  const cuerpo = JSON.stringify(contenido);
+  const h = huella(repo + "|" + cuerpo);
+  if (!forzar && props.getProperty("PUB_HUELLA") === h) return "sin cambios";
+
+  const texto = JSON.stringify(Object.assign({ generado: new Date().toISOString() }, contenido), null, 1) + "\n";
+  const url = `https://api.github.com/repos/${repo}/contents/${PUB_RUTA}`;
+  const cab = { Authorization: "Bearer " + token, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
+  const actual = UrlFetchApp.fetch(url, { headers: cab, muteHttpExceptions: true });
+  let sha;
+  if (actual.getResponseCode() === 200) sha = JSON.parse(actual.getContentText()).sha;
+  else if (actual.getResponseCode() !== 404) throw new Error(errorGitHub(actual));
+  const r = UrlFetchApp.fetch(url, { method: "put", headers: cab, contentType: "application/json", muteHttpExceptions: true,
+    payload: JSON.stringify({ message: "Panel: actualizar datos públicos de la web", content: Utilities.base64Encode(texto, Utilities.Charset.UTF_8), sha }) });
+  if (r.getResponseCode() !== 200 && r.getResponseCode() !== 201) throw new Error(errorGitHub(r));
+  props.setProperty("PUB_HUELLA", h);
+  return "publicado";
+}
+function errorGitHub(r) {
+  const c = r.getResponseCode();
+  if (c === 401) return "GitHub rechazó el token (vencido o mal copiado). Vuelve a conectarlo: Aula → Web rápida.";
+  if (c === 403 || c === 404) return "El token no tiene permiso sobre ese repositorio. Revisa Config → GITHUB_REPO y que el token tenga Contents: Read and write.";
+  return "GitHub respondió " + c + ": " + r.getContentText().slice(0, 200);
+}
+function anotarPublicacion(txt) {
+  fijarConfig("WEB_PUBLICA", Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM HH:mm") + " · " + txt, PUB_DESC);
+}
+
+/** Lo ejecuta el activador cada 10 min. De noche no hace nada (ahorra la cuota diaria de Apps Script). */
+function publicarWebAuto() {
+  const hora = Number(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "H"));
+  if (hora < 6 || hora >= 23) return;
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return;
+  try {
+    const r = publicarWebNucleo(false);
+    if (r !== "sin cambios") anotarPublicacion(r);
+  } catch (e) { anotarPublicacion("ERROR: " + e.message); }
+  finally { lock.releaseLock(); }
+}
+
+/** Menú: subir ahora (borra antes la memoria, para tomar lo último de Drive). */
+function publicarWebAhora() {
+  try {
+    refrescarMemoria();
+    const r = publicarWebNucleo(true);
+    anotarPublicacion(r);
+    aviso("Listo: datos públicos subidos a GitHub. La web los muestra en 1 minuto aprox. (lo que tarda Vercel en publicar).");
+  } catch (e) { aviso(e.message); }
+}
+
+/** Menú: activa o desactiva la revisión automática. La primera vez pide el token y el repositorio. */
+function alternarWebRapida() {
+  const ui = SpreadsheetApp.getUi();
+  const activos = ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === "publicarWebAuto");
+  if (activos.length) {
+    const r = ui.alert("Web rápida", "Está ACTIVADA. ¿Desactivarla? (la web seguirá funcionando, solo que sin la carga instantánea)", ui.ButtonSet.YES_NO);
+    if (r !== ui.Button.YES) return;
+    activos.forEach(t => ScriptApp.deleteTrigger(t));
+    anotarPublicacion("desactivada");
+    return aviso("Web rápida DESACTIVADA.");
+  }
+  const props = PropertiesService.getScriptProperties();
+  if (!valorConfig("GITHUB_REPO")) fijarConfig("GITHUB_REPO", "franco-felles/Prueba-web", "Repositorio de la web (usuario/repo) donde el Panel escribe conexion/datos.json");
+  if (!props.getProperty("GITHUB_TOKEN") || ui.alert("Web rápida", "¿Cambiar el token de GitHub guardado?", ui.ButtonSet.YES_NO) === ui.Button.YES) {
+    const t = ui.prompt("Conectar con GitHub", "Pega tu token de GitHub (empieza con github_pat_…).\nSe guarda en las Propiedades del script, no en la hoja.", ui.ButtonSet.OK_CANCEL);
+    if (t.getSelectedButton() !== ui.Button.OK || !t.getResponseText().trim()) return;
+    props.setProperty("GITHUB_TOKEN", t.getResponseText().trim());
+    props.deleteProperty("PUB_HUELLA");
+  }
+  try {
+    const r = publicarWebNucleo(true);
+    anotarPublicacion(r);
+  } catch (e) { return aviso("No se pudo publicar, así que no se activó.\n\n" + e.message); }
+  ScriptApp.newTrigger("publicarWebAuto").timeBased().everyMinutes(10).create();
+  aviso("Web rápida ACTIVADA.\n\nRepositorio: " + valorConfig("GITHUB_REPO") + "\nCada 10 minutos (de 6:00 a 23:00) el Panel revisa si cambiaron clases, enlaces, " +
+        "archivos de Drive o quizzes, y solo entonces actualiza la web. Para que sea inmediato: Aula → Publicar en la web ahora.\n\n" +
+        "Lo último que hizo queda en Config → WEB_PUBLICA.");
+}
+
 
 /** Escribe (o crea) una fila CLAVE/VALOR en Config. */
 function fijarConfig(clave, valor, desc) {

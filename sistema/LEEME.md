@@ -56,3 +56,22 @@ La web no abre la hoja en cada visita: Google guarda los datos ya preparados por
 - Lo que **editas a mano en el Panel** (publicar, enlaces, grupos) se ve al instante: al editar se borra la memoria de esa pestaña.
 - Lo que hace el menú (importar, nueva clase, generar copias, limpiar) también se ve al instante.
 - Lo único que puede tardar hasta 5 min son los **archivos nuevos en carpetas de Drive**. Para forzarlo: **Aula → Actualizar web ahora**.
+
+## Web rápida (datos públicos como archivo)
+
+El Panel escribe `conexion/datos.json` en el repositorio de GitHub de la web; Vercel lo publica y la web lo lee como un archivo más. Así el portal y las clases **aparecen al instante** y lo personal (mi documento, mis quizzes rendidos) llega después desde el Panel.
+
+- Solo lleva lo que no es privado: clases **PUBLICADAS** (tema, unidad), sus enlaces, los archivos de sus carpetas de Drive y los títulos de los quizzes visibles. **Nunca** alumnos, códigos, copias, notas ni preguntas. Cualquiera puede abrir ese archivo.
+- Si el archivo no existe o está viejo no pasa nada: el Panel siempre corrige lo que se muestra.
+
+**Activarla (una vez):**
+1. En GitHub: foto de perfil → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
+   - *Repository access*: **Only select repositories** → `Prueba-web` y `aula-virtual`.
+   - *Permissions → Repository permissions → Contents*: **Read and write**.
+   - Copia el token (`github_pat_…`). GitHub no lo vuelve a mostrar.
+2. En el Panel: **Aula → Web rápida (activar / desactivar)** → pega el token. Google pedirá permiso para "conectarse a un servicio externo": acéptalo.
+3. Listo. Cada 10 min (6:00–23:00) revisa si algo cambió y solo entonces sube el archivo. Para que sea inmediato: **Aula → Publicar en la web ahora**. Lo último que hizo: `Config → WEB_PUBLICA`.
+
+**Al cambiar de repositorio** (por ejemplo, al pasar todo a `aula-virtual`): cambia `Config → GITHUB_REPO` y usa **Aula → Publicar en la web ahora**.
+
+Como el Panel hace sus propios commits, antes de subir cambios desde tu PC haz `git pull`.

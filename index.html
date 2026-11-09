@@ -186,7 +186,14 @@ $("fClave").onsubmit = async e => {
 
   const cont = $("contenido");
   // Muestra al instante lo último cargado (si lo hay) y luego lo actualiza con lo fresco
-  try { await Aula.apiRapida("portal", {}, r => pintarPortal(r, s, docente)); }
+  // Alumno: si aún no hay nada en memoria, pinta YA con los datos públicos (datos.json) y luego completa con el Panel
+  let real = false;
+  if (!docente) Aula.publico().then(p => {
+    if (!p || real) return;
+    pintarPortal({ provisional: true, alumnos: s.alumnos || [], clases: p.clases,
+                   quizzes: p.quizzes.map(q => Object.assign({}, q, { rendidos: undefined })) }, s, docente);
+  });
+  try { await Aula.apiRapida("portal", {}, r => { real = true; pintarPortal(r, s, docente); }); }
   catch (ex) { cont.replaceChildren(el("div", "aviso", ex.message)); }
 })();
 
@@ -198,7 +205,7 @@ function pintarPortal(r, s, docente) {
 
   cont.replaceChildren();
   // Quizzes que el alumno aún debe rendir (abiertos y no hechos por todos los de la sesión)
-  const pendiente = q => q.abierto && (q.rendidos || []).length < (s.alumnos || []).length;
+  const pendiente = q => q.abierto && q.rendidos !== undefined && q.rendidos.length < (s.alumnos || []).length;
   const visibles = new Set(r.clases.map(c => c.id));
   const marca = c => {
     if (docente) return !c.publicada ? el("span", "borrador", "NO PUBLICADA") : null;
