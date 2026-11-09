@@ -87,7 +87,10 @@ El alumno no ve `m1c1`: ve lo que diga la ficha del `<head>`:
 - Cada quiz es una **EC virtual** (EC1–EC3 de una unidad, sale dentro de la carpeta de esa EC) o un **quiz de clase** (sale dentro de la carpeta de la clase). Sin clase, sale en el inicio.
 - Estado: **Oculto** (no lo ven) · **Cerrado** (lo ven, no pueden rendirlo, sí ven su nota) · **Abierto**. Se cambia desde la lista, sin entrar al editor.
 - Opciones por quiz: **repetir** (se queda la nota más alta), **ver su puntaje** al terminar (por defecto sí), **ver sus errores** con la respuesta correcta (por defecto no).
-- Preguntas de 2 a 5 alternativas y cuántas mostrar al azar. Se pueden importar con el formato `N,TEMA,PREGUNTA,A,B,C,D,E` (la correcta lleva `*`).
+- Preguntas de 2 a 5 alternativas. Cada alumno recibe **10 al azar por defecto** (editable); preguntas y alternativas salen en orden aleatorio.
+- **Puntos por pregunta** (opcional): las que no tienen puntos se reparten lo que falta para 20. El editor avisa si faltan o sobran. Si al alumno le tocan solo algunas, su nota se ajusta a 20.
+- **Descuento por salir**: −1 punto por cada vez que cambia de pestaña o minimiza (activado por defecto). Se le advierte al empezar y se le avisa en el momento.
+- **Importar desde .txt**: botón «Subir archivo .txt» (o arrastrar). «Descargar plantilla» trae el formato explicado: `1.` pregunta, `a)` alternativas, `*` la correcta, `[2]` puntos, `TEMA:`, `TITULO:`, `MOSTRAR:`. También acepta el CSV del quiz antiguo.
 - El alumno **nunca recibe las respuestas correctas** mientras rinde: corrige el Panel. Se detecta el cambio de pestaña.
 - Las notas quedan en la pestaña **Resultados** del Panel y se pueden **descargar en CSV (Excel)** desde la página de resultados. La corrección de nota y el reinicio se hacen desde la web.
 

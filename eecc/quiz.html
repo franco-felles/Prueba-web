@@ -103,6 +103,9 @@
   button.opcion:hover { border-color: var(--acc); background: var(--acc-bg); }
   .otra-vez { font-size: .85rem; color: var(--acc-d); background: var(--acc-bg); border-radius: 10px; padding: 10px 12px; margin-top: 12px; }
   .mut { color: var(--mut); font-size: .85rem; }
+  .advertencia.fuerte { background: #fdecea; border-color: #efc3bf; color: #7d211b; font-weight: 600; }
+  .contador .descuento { color: var(--err); font-weight: 700; }
+  .pts-q { font-family: var(--mono); font-size: .72rem; color: var(--mut); font-weight: 500; margin-left: 6px; }
   .tarjeta .btn.ghost { margin-top: 10px; }
   .alerta { position: fixed; top: 76px; left: 50%; transform: translateX(-50%); z-index: 120; display: none; max-width: 90vw; background: #7d211b; color: #fff; padding: 10px 16px; border-radius: 12px; font-size: .85rem; box-shadow: 0 12px 30px rgba(16,35,28,.3); }
   .alerta.on { display: block; animation: sube .3s ease both; }
@@ -160,7 +163,9 @@ function inicio(alumno, r) {
   if (r.previo) t.append(el("div", "otra-vez", "Ya lo rendiste" + (r.previo.puntaje ? ` (nota ${r.previo.nota})` : "") +
     ` · este es tu intento ${r.previo.intentos + 1}. Se queda tu nota más alta.`));
   t.append(
-    el("div", "advertencia", "⚠️ El quiz detecta si cambias de pestaña o minimizas la ventana. Esos eventos quedan registrados y se informan a tu docente."), b);
+    r.penalizar
+      ? el("div", "advertencia fuerte", "⚠️ Cada vez que cambies de pestaña, abras otro programa o minimices la ventana se te descontará 1 PUNTO. Quédate en esta pantalla hasta terminar.")
+      : el("div", "advertencia", "⚠️ El quiz detecta si cambias de pestaña o minimizas la ventana. Esos eventos quedan registrados y se informan a tu docente."), b);
   b.onclick = () => rendir(alumno, r);
   c.appendChild(t); app.replaceChildren(c);
 }
@@ -173,7 +178,9 @@ function rendir(alumno, r) {
     if (terminado) return;
     const now = Date.now(); if (now - ult < 600) return; ult = now;
     incidentes++;
-    alerta.textContent = `⚠️ Incidente ${incidentes}: saliste de la pestaña o minimizaste (${fmtHora(new Date())}).`;
+    alerta.textContent = r.penalizar
+      ? `⚠️ Saliste del quiz: −1 punto (llevas −${incidentes}).`
+      : `⚠️ Incidente ${incidentes}: saliste de la pestaña o minimizaste (${fmtHora(new Date())}).`;
     alerta.classList.add("on"); clearTimeout(incidente.t); incidente.t = setTimeout(() => alerta.classList.remove("on"), 5000);
   }
   document.addEventListener("visibilitychange", () => { if (document.hidden) incidente(); });
@@ -191,7 +198,10 @@ function rendir(alumno, r) {
       b.onclick = () => { respuestas.push({ id: q.id, elegida: o.i, orden: q.opciones.map(x => x.i) }); idx++; pintar(); };
       ops.appendChild(b);
     });
-    quiz.append(bar, el("div", "contador", `${idx + 1} / ${preguntas.length}${q.tema ? " · " + q.tema : ""}`), el("h1", "pregunta", q.texto), ops);
+    const vale = q.puntos ? ` · vale ${String(q.puntos).replace(".", ",")} pt${q.puntos === 1 ? "" : "s"}` : "";
+    const cont = el("div", "contador", `${idx + 1} / ${preguntas.length}${q.tema ? " · " + q.tema : ""}${vale}`);
+    if (r.penalizar && incidentes) cont.appendChild(el("span", "descuento", ` · −${incidentes} por salir`));
+    quiz.append(bar, cont, el("h1", "pregunta", q.texto), ops);
     app.replaceChildren(quiz);
   }
   async function enviar() {
@@ -226,6 +236,7 @@ function mostrarNota(alumno, titulo, r, previa) {
     t.append(big, el("p", "", `Acertaste ${r.aciertos} de ${r.total} preguntas.`));
     if (r.mejor != null) t.append(el("p", "", `Tu nota más alta sigue siendo ${r.mejor}.`));
   } else t.append(el("p", "", "Tu docente revisará tu nota."));
+  if (r.descuento) t.append(el("div", "incid", (r.descuento > 1 ? `Se te descontaron ${r.descuento} puntos` : "Se te descontó 1 punto") + " por salir del quiz."));
   if (r.intentos > 1) t.append(el("p", "mut", `Intentos: ${r.intentos}`));
   if (r.revision && r.revision.length) {
     const v = el("button", "btn block ghost", "Ver mis respuestas"); v.type = "button";
@@ -333,13 +344,15 @@ async function vistaDocente() {
     else { const n = el("span", "nota", String(r.nota)); n.appendChild(el("small", "", "sobre 20")); meta.append(n); }
     meta.append(el("span", "aciertos", `${r.aciertos}/${r.total} correctas`), el("span", "hora", "🕒 " + fmtHora(r.hora)));
     if (r.intentos > 1) meta.append(el("span", "aciertos", `↻ ${r.intentos} intentos (nota más alta)`));
-    if (r.incidentes) meta.append(el("span", "incid", "⚠️ " + r.incidentes + " incidente(s)"));
+    if (r.incidentes) meta.append(el("span", "incid", "⚠️ " + r.incidentes + " salida(s) de la pestaña" + (r.descuento ? ` · −${r.descuento} pts` : "")));
     card.append(top, meta);
     (r.detalle || []).forEach((resp, i) => {
       const p = porId[resp.id];
       const pq = el("div", "pregunta-det" + (resp.ok ? " ok" : " fallo"));
       if (!p) { pq.appendChild(el("div", "pregunta-det-q", `${i + 1}. (pregunta borrada del quiz)`)); card.appendChild(pq); return; }
-      pq.appendChild(el("div", "pregunta-det-q", `${i + 1}. ${p.texto}`));
+      const tq = el("div", "pregunta-det-q", `${i + 1}. ${p.texto}`);
+      if (resp.pts) tq.appendChild(el("span", "pts-q", (resp.ok ? "+" : "0 de ") + String(resp.pts).replace(".", ",") + " pts"));
+      pq.appendChild(tq);
       const ops = el("div", "opciones-det");
       (resp.orden && resp.orden.length ? resp.orden : p.alts.map((_, k) => k)).forEach(k => {
         if (p.alts[k] === undefined) return;
@@ -369,11 +382,11 @@ async function vistaDocente() {
   /** CSV con ; y BOM: Excel en español lo abre directo, con tildes y columnas bien separadas. */
   function descargarCSV() {
     const esc = v => { v = v == null ? "" : String(v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
-    const filas = [["GRUPO", "N", "CODIGO", "ALUMNO", "NOTA", "NOTA ORIGINAL", "ACIERTOS", "TOTAL", "INTENTOS", "INCIDENTES", "HORA"]];
+    const filas = [["GRUPO", "N", "CODIGO", "ALUMNO", "NOTA", "NOTA ORIGINAL", "ACIERTOS", "TOTAL", "INTENTOS", "SALIDAS", "DESCUENTO", "HORA"]];
     alumnos.slice().sort((a, b) => String(a.grupo).localeCompare(String(b.grupo)) || (a.n || 0) - (b.n || 0)).forEach(a => {
       const r = res[a.codigo];
       filas.push([a.grupo, a.n, a.codigo, Aula.nombreBonito(a.nombre), r ? nota(r) : "", r ? r.nota : "", r ? r.aciertos : "", r ? r.total : "",
-        r ? r.intentos : "", r ? r.incidentes : "", r ? fmtHora(r.hora) : "no rindió"]);
+        r ? r.intentos : "", r ? r.incidentes : "", r ? r.descuento || 0 : "", r ? fmtHora(r.hora) : "no rindió"]);
     });
     const texto = "﻿" + filas.map(f => f.map(esc).join(";")).join("\r\n");
     const a = document.createElement("a");

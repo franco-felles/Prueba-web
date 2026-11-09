@@ -96,9 +96,24 @@
   .alt input[type=text] { flex: 1; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); color: var(--ink); }
   .alt.ok input[type=text] { border-color: var(--moss); background: var(--moss-bg); }
   .preg .pie { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: .78rem; color: var(--mut); }
-  details.importar { background: var(--panel); border: 1px dashed var(--line); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; }
-  details.importar summary { cursor: pointer; font-weight: 600; font-size: .9rem; }
-  details.importar textarea { width: 100%; min-height: 120px; margin: 10px 0; padding: 10px; border: 1px solid var(--line); border-radius: 9px; font-family: var(--mono); font-size: .78rem; background: var(--panel); color: var(--ink); }
+  .importar { background: var(--panel); border: 2px dashed var(--line); border-radius: 14px; padding: 16px 18px; margin-bottom: 16px; transition: border-color .15s, background .15s; }
+  .importar.encima { border-color: var(--acc); background: var(--acc-bg); }
+  .importar .fila-imp { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .importar .fila-imp .hint { flex: 1 1 220px; margin: 0; }
+  .importar details { margin-top: 12px; }
+  .importar summary { cursor: pointer; font-weight: 600; font-size: .86rem; color: var(--ink-2); }
+  .avisos-imp { margin-top: 12px; background: var(--amber-bg); border: 1px solid #ecd3a8; border-radius: 10px; padding: 10px 14px; font-size: .82rem; color: #7a4d10; }
+  .avisos-imp ul { margin: 6px 0 0; padding-left: 18px; }
+  .preg-top input.pts { width: 74px; flex: none; padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; font-size: .82rem; font-family: var(--mono); background: var(--panel); color: var(--ink); text-align: right; }
+  .preg-top input.pts.fijo { border-color: var(--acc); background: var(--acc-bg); font-weight: 700; }
+  .preg-top .pts-lab { font-family: var(--mono); font-size: .72rem; color: var(--mut); }
+  .puntos-box { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--moss-bg); border: 1px solid #cfdccb; color: var(--moss-d); border-radius: 12px; padding: 12px 16px; margin-bottom: 14px; font-size: .88rem; }
+  .puntos-box.mal { background: var(--err-bg); border-color: #efc3bf; color: var(--err); }
+  .puntos-box b { font-family: var(--mono); font-size: 1.05rem; }
+  .puntos-box span { flex: 1 1 260px; }
+  .pts-chip { font-family: var(--mono); font-size: .78rem; font-weight: 700; border-radius: 8px; padding: 6px 10px; background: var(--moss-bg); color: var(--moss-d); }
+  .pts-chip.mal { background: var(--err-bg); color: var(--err); }
+  .importar textarea { width: 100%; min-height: 120px; margin: 10px 0; padding: 10px; border: 1px solid var(--line); border-radius: 9px; font-family: var(--mono); font-size: .78rem; background: var(--panel); color: var(--ink); }
   .barra-guardar { position: sticky; bottom: 0; z-index: 5; background: rgba(246,244,238,.96); backdrop-filter: blur(6px); border-top: 1px solid var(--line); padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 18px; }
   .barra-guardar .estado { flex: 1; min-width: 120px; font-size: .84rem; color: var(--mut); }
 
@@ -167,12 +182,12 @@ function segEstado(valor, alCambiar, grande) {
 }
 
 /* ---------- ventana de confirmación ---------- */
-function confirmar({ titulo, texto, ok = "Aceptar", peligro, casilla }) {
+function confirmar({ titulo, texto, ok = "Aceptar", peligro, casilla, marcada }) {
   return new Promise(res => {
     const d = el("dialog", "conf");
     d.append(el("h3", "", titulo)); if (texto) d.append(el("p", "", texto));
     let chk = null;
-    if (casilla) { const l = el("label"); chk = el("input"); chk.type = "checkbox"; l.append(chk, casilla); d.append(l); }
+    if (casilla) { const l = el("label"); chk = el("input"); chk.type = "checkbox"; chk.checked = !!marcada; l.append(chk, casilla); d.append(l); }
     const bts = el("div", "bts");
     const no = boton("Cancelar", "ghost lg"), si = boton(ok, (peligro ? "peligro" : "") + " lg", peligro ? "basura" : null);
     if (peligro) { si.style.background = "var(--err)"; si.style.color = "#fff"; si.style.borderColor = "var(--err)"; }
@@ -239,6 +254,7 @@ function filaQuiz(q) {
   if (q.repetir) chips.append(el("span", "chip", "↻ repetible"));
   chips.append(el("span", "chip", q.puntaje ? "ve su nota" : "no ve su nota"));
   if (q.errores) chips.append(el("span", "chip", "ve sus errores"));
+  if (q.penalizar !== false) chips.append(el("span", "chip", "−1 por salir"));
   if (d.aviso && !q.oculto) chips.append(el("span", "chip warn", "⚠ " + d.aviso));
   info.append(el("span", "tit", q.titulo), chips);
 
@@ -266,8 +282,93 @@ function filaQuiz(q) {
 /* ======================= EDITOR ======================= */
 const vacia = () => ({ tema: "", texto: "", alts: ["", "", "", ""], correcta: -1 });
 
+/* ---------- IMPORTAR (.txt) ----------
+   Formato pensado para escribirse a mano en el Bloc de notas (ver PLANTILLA). También acepta el CSV del quiz antiguo. */
+const PLANTILLA = `# ============ PLANTILLA DE QUIZ · Aula Virtual ============
+# Las líneas que empiezan con # se ignoran (son instrucciones).
+#
+# · Cada pregunta empieza con un número:   1.   o   1)
+# · Cada alternativa empieza con una letra:  a)  b)  c)  d)  e)   (de 2 a 5)
+# · Marca la correcta con un * al final.
+# · Puntos (opcional), al final de la pregunta:  [2]   o   [1.5 pts]
+#   Las preguntas sin puntos se reparten solas lo que falta para 20.
+# · TEMA: agrupa las preguntas que siguen (opcional).
+# · TITULO y MOSTRAR (cuántas recibe cada alumno) son opcionales.
+#   Guarda el archivo como .txt y súbelo en «Mis quizzes».
+
+TITULO: Repaso de Word
+MOSTRAR: 10
+
+TEMA: Atajos de teclado
+1. ¿Qué atajo guarda un documento en Word (español)?
+a) Ctrl + G *
+b) Ctrl + P
+c) Ctrl + S
+
+2. ¿Qué hace Ctrl + Z? [3]
+a) Copiar
+b) Deshacer *
+c) Cerrar el programa
+
+TEMA: Formato
+3. ¿En qué pestaña está el botón Negrita?
+a) Insertar
+b) Inicio *
+c) Vista
+d) Diseño
+`;
+
+/** Lee el formato TXT. Devuelve { titulo, mostrar, preguntas, avisos }. */
+function leerTxt(texto) {
+  const out = { titulo: "", mostrar: null, preguntas: [], avisos: [] };
+  const reQ = /^(?:pregunta\s*)?(\d{1,3})\s*[.):\-]\s*(.+)$/i;
+  const reA = /^(\*)?\s*([a-h])\s*[.)\-]\s*(.+)$/i;
+  const rePts = [/\s*\[\s*(\d+(?:[.,]\d+)?)\s*(?:pts?|ptos?|puntos?)?\.?\s*\]\s*$/i, /\s*\(\s*(\d+(?:[.,]\d+)?)\s*(?:pts?|ptos?|puntos?)\.?\s*\)\s*$/i];
+  const reOk = /\s*(\*|✓|✔|\(correcta\))\s*$/i;
+  let tema = "", act = null;
+  const sacarPuntos = t => { for (const re of rePts) { const p = re.exec(t); if (p) return [t.slice(0, p.index).trim(), parseFloat(p[1].replace(",", "."))]; } return [t, null]; };
+  const cerrar = () => {
+    if (!act) return;
+    const n = out.preguntas.length + 1, donde = `Pregunta ${n} (línea ${act.linea})`;
+    if (act.alts.length < 2) { out.avisos.push(`${donde}: tiene ${act.alts.length} alternativa(s); necesita al menos 2.`); while (act.alts.length < 2) act.alts.push(""); }
+    if (act.marcadas === 0) out.avisos.push(`${donde}: no tiene la correcta marcada con *.`);
+    if (act.marcadas > 1) out.avisos.push(`${donde}: tiene ${act.marcadas} correctas; se tomó la primera.`);
+    out.preguntas.push({ tema: act.tema, texto: act.texto, alts: act.alts, correcta: act.correcta, puntos: act.puntos });
+    act = null;
+  };
+  texto.replace(/^﻿/, "").split(/\r?\n/).forEach((raw, i) => {
+    const l = raw.trim(), nl = i + 1; let m;
+    if (!l || /^(#|\/\/)/.test(l)) return;
+    if ((m = /^t[ií]tulo\s*:\s*(.*)$/i.exec(l))) { out.titulo = m[1].trim(); return; }
+    if ((m = /^(?:mostrar|preguntas por alumno)\s*:\s*(\d+)/i.exec(l))) { out.mostrar = Number(m[1]); return; }
+    if ((m = /^tema\s*:\s*(.*)$/i.exec(l))) { tema = m[1].trim(); return; }
+    if (act && (m = reA.exec(l))) {
+      let t = m[3].trim(), ok = !!m[1];
+      if (reOk.test(t)) { ok = true; t = t.replace(reOk, "").trim(); }
+      if (act.alts.length >= 5) { out.avisos.push(`Línea ${nl}: más de 5 alternativas; se ignoró «${t.slice(0, 30)}».`); return; }
+      if (ok) { if (act.correcta < 0) act.correcta = act.alts.length; act.marcadas++; }
+      act.alts.push(t); return;
+    }
+    if ((m = reQ.exec(l))) {
+      cerrar();
+      const [t, puntos] = sacarPuntos(m[2].trim());
+      act = { tema, texto: t, alts: [], correcta: -1, marcadas: 0, puntos, linea: nl }; return;
+    }
+    if (act && !act.alts.length) {                                          // pregunta escrita en varias líneas
+      const [t, puntos] = sacarPuntos(l); act.texto += "\n" + t; if (puntos !== null) act.puntos = puntos; return;
+    }
+    out.avisos.push(`Línea ${nl}: no se entendió «${l.slice(0, 40)}${l.length > 40 ? "…" : ""}».`);
+  });
+  cerrar();
+  if (!out.preguntas.length) {                                             // ¿era el CSV del quiz antiguo?
+    const csv = leerCSV(texto);
+    if (csv.length) return { titulo: "", mostrar: null, preguntas: csv, avisos: csv.some(p => p.correcta < 0) ? ["Algunas preguntas no tienen la correcta marcada."] : [] };
+  }
+  return out;
+}
+
 /** Formato del quiz antiguo (CSV):  N,TEMA,PREGUNTA,A,B,C,D,E   — la correcta lleva * al final. También acepta tabulaciones (pegado desde Sheets). */
-function importarTexto(texto) {
+function leerCSV(texto) {
   const filas = texto.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const sep = filas.some(l => l.includes("\t")) ? "\t" : (filas.join("").split(";").length > filas.join("").split(",").length ? ";" : ",");
   const partir = l => { const out = []; let c = "", q = false; for (let i = 0; i < l.length; i++) { const ch = l[i];
@@ -284,9 +385,31 @@ function importarTexto(texto) {
   return preguntas;
 }
 
+/** Lee un .txt en UTF-8; si trae caracteres raros (Bloc de notas antiguo), lo relee como ANSI para no romper las tildes. */
+async function textoDeArchivo(file) {
+  const buf = await file.arrayBuffer();
+  const t = new TextDecoder("utf-8").decode(buf);
+  return t.includes("�") ? new TextDecoder("windows-1252").decode(buf) : t;
+}
+function descargar(nombre, texto) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["﻿" + texto.replace(/\n/g, "\r\n")], { type: "text/plain;charset=utf-8" }));
+  a.download = nombre; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+/** Puntos: las preguntas con puntos los conservan; las vacías se reparten lo que falta para 20. */
+function calcPuntos(preguntas) {
+  const fijas = preguntas.filter(p => Number(p.puntos) > 0);
+  const suma = fijas.reduce((t, p) => t + Number(p.puntos), 0), libres = preguntas.length - fijas.length;
+  const cada = libres ? Math.max(0, 20 - suma) / libres : 0;
+  const total = libres ? Math.max(20, suma) : suma;
+  return { suma, libres, cada, total, dif: Math.round((total - 20) * 100) / 100 };
+}
+const fmt = x => String(Math.round(x * 100) / 100).replace(".", ",");
+
 async function vistaEditor(id) {
   app.replaceChildren(el("p", "vacio", "Cargando…"));
-  let quiz = { id: null, titulo: "", clase: "", mostrar: 0, abierto: false, oculto: true, repetir: false, puntaje: true, errores: false, preguntas: [vacia()] };
+  let quiz = { id: null, titulo: "", clase: "", mostrar: 10, abierto: false, oculto: true, repetir: false, puntaje: true, errores: false, penalizar: true, preguntas: [vacia()] };
   history.replaceState(null, "", "?editar=" + (id || "nuevo"));
   try {
     if (id) { const d = await Aula.api("quizVer", { id }); quiz = Object.assign(d.quiz, { rindieron: d.resultados.length }); }
@@ -362,8 +485,9 @@ async function vistaEditor(id) {
   const campo = (lab, input) => { const f = el("div", "field"); f.append(el("label", "", lab), input); return f; };
   const iTit = el("input"); iTit.value = quiz.titulo; iTit.oninput = marcar;
   const iMos = el("input"); iMos.type = "number"; iMos.min = 0; iMos.value = quiz.mostrar || 0; iMos.oninput = marcar;
+  iMos.addEventListener("input", () => actualizarPuntos());
   datos.append(campo("Título", iTit), campo("Preguntas por alumno", iMos));
-  cDatos.append(datos, el("p", "hint", "«Preguntas por alumno»: 0 = todas. Si pones 10 y hay 25, cada alumno recibe 10 distintas al azar. Las alternativas siempre se barajan."));
+  cDatos.append(datos, el("p", "hint", "«Preguntas por alumno»: por defecto 10 (si hay menos, salen todas; 0 = todas). Cada alumno recibe las suyas al azar, y tanto las preguntas como las alternativas salen en orden aleatorio."));
 
   /* --- 3. opciones para el alumno --- */
   const cOpc = el("div", "card"); cOpc.append(el("h2", "", "3 · Para el alumno"));
@@ -379,23 +503,80 @@ async function vistaEditor(id) {
   const oRep = opcion("Puede volver a rendirlo", "Si lo rinde otra vez, se queda con su nota más alta.", quiz.repetir);
   const oPun = opcion("Ve su puntaje al terminar", "Si lo apagas, solo ve «Respuestas enviadas».", quiz.puntaje !== false);
   const oErr = opcion("Ve sus errores al terminar", "Qué respondió mal y cuál era la correcta.", quiz.errores);
+  const oPen = opcion("Descontar 1 punto por cada salida", "Si cambia de pestaña o minimiza, pierde 1 punto. Se le advierte al empezar y se le avisa cada vez.", quiz.penalizar !== false);
   cOpc.append(seg, descEstado, opciones);
 
-  /* --- importar --- */
-  const imp = el("details", "importar"); imp.appendChild(el("summary", "", "Importar preguntas (formato del quiz antiguo o pegado desde Sheets)"));
-  const ta = el("textarea"); ta.placeholder = "N,TEMA,PREGUNTA,A,B,C,D,E\n1,Excel,¿Con qué símbolo empieza una fórmula?,Igual (=)*,Más (+),Asterisco (*),\n\nLa correcta lleva * al final.";
+  /* --- importar (.txt) --- */
+  const imp = el("div", "importar");
+  const fila = el("div", "fila-imp");
+  const file = el("input"); file.type = "file"; file.accept = ".txt,.csv,text/plain"; file.hidden = true;
+  const bSubir = boton("📄 Subir archivo .txt", "morado");
+  const bPlant = boton("Descargar plantilla", "ghost");
+  fila.append(bSubir, bPlant, el("p", "hint", "O arrastra el archivo aquí. Abre la plantilla con el Bloc de notas para ver el formato."), file);
+  const pegar = el("details"); pegar.appendChild(el("summary", "", "…o pegar el texto"));
+  const ta = el("textarea"); ta.placeholder = "1. ¿Qué atajo guarda un documento?\na) Ctrl + G *\nb) Ctrl + P\n\n2. ¿Qué hace Ctrl + Z? [3]\na) Copiar\nb) Deshacer *";
   const bImp = boton("Agregar estas preguntas", "sm");
-  imp.append(el("p", "hint", "Una pregunta por fila: N, TEMA, PREGUNTA y de 2 a 5 alternativas. Marca la correcta con * al final."), ta, bImp);
-  bImp.onclick = () => {
-    const nuevas = importarTexto(ta.value);
-    if (!nuevas.length) return Aula.toast("No se reconoció ninguna pregunta", "Revisa el formato.", "warn");
-    quiz.preguntas = quiz.preguntas.filter(p => p.texto.trim()).concat(nuevas);
-    ta.value = ""; imp.open = false; marcar(); pintarPreguntas();
-    Aula.toast(nuevas.length + " pregunta(s) agregadas", nuevas.some(p => p.correcta < 0) ? "Algunas no tienen correcta marcada: revísalas." : "");
-  };
+  pegar.append(ta, bImp);
+  const avisosImp = el("div");
+  imp.append(fila, pegar, avisosImp);
+  bPlant.onclick = () => descargar("plantilla-quiz.txt", PLANTILLA);
+  bSubir.onclick = () => file.click();
+  file.onchange = async () => { const f = file.files[0]; file.value = ""; if (f) importar(await textoDeArchivo(f), f.name); };
+  ["dragenter", "dragover"].forEach(ev => imp.addEventListener(ev, e => { e.preventDefault(); imp.classList.add("encima"); }));
+  ["dragleave", "drop"].forEach(ev => imp.addEventListener(ev, e => { e.preventDefault(); imp.classList.remove("encima"); }));
+  imp.addEventListener("drop", async e => { const f = e.dataTransfer.files[0]; if (f) importar(await textoDeArchivo(f), f.name); });
+  bImp.onclick = () => importar(ta.value);
+
+  async function importar(texto, nombre) {
+    const r = leerTxt(texto || "");
+    avisosImp.replaceChildren();
+    if (!r.preguntas.length) return Aula.toast("No se reconoció ninguna pregunta", "Revisa el formato (descarga la plantilla).", "warn");
+    const actuales = quiz.preguntas.filter(p => p.texto.trim());
+    let reemplazar = false;
+    if (actuales.length) {
+      const c = await confirmar({ titulo: `Se encontraron ${r.preguntas.length} pregunta(s)`, ok: "Importar",
+        texto: nombre ? "Archivo: " + nombre : "", casilla: `Reemplazar las ${actuales.length} pregunta(s) que ya tiene el quiz (si no, se agregan al final).` });
+      if (!c) return;
+      reemplazar = c.marcado;
+    }
+    quiz.preguntas = (reemplazar ? [] : actuales).concat(r.preguntas);
+    if (r.titulo && !iTit.value.trim()) iTit.value = r.titulo;
+    if (r.mostrar !== null) iMos.value = r.mostrar;
+    ta.value = ""; pegar.open = false; marcar(); pintarPreguntas();
+    if (r.avisos.length) {
+      const box = el("div", "avisos-imp"), ul = el("ul");
+      box.append(el("b", "", `Se importaron ${r.preguntas.length} pregunta(s), pero revisa esto:`));
+      r.avisos.slice(0, 12).forEach(a => ul.appendChild(el("li", "", a)));
+      if (r.avisos.length > 12) ul.appendChild(el("li", "", `…y ${r.avisos.length - 12} aviso(s) más.`));
+      box.appendChild(ul); avisosImp.appendChild(box);
+    }
+    Aula.toast(r.preguntas.length + " pregunta(s) importadas", r.avisos.length ? "Hay avisos: revísalos arriba de las preguntas." : "Revisa y guarda el quiz.", r.avisos.length ? "warn" : "");
+  }
+
+  /* --- puntos --- */
+  const ptsBox = el("div", "puntos-box"), ptsTxt = el("span"), ptsChip = el("span", "pts-chip");
+  const bRepartir = boton("Repartir automáticamente", "sm ghost");
+  bRepartir.onclick = () => { quiz.preguntas.forEach(p => p.puntos = null); marcar(); pintarPreguntas(); };
+  ptsBox.append(ptsTxt, bRepartir);
+  const ptsInputs = [];
+  const conTexto = () => quiz.preguntas.filter(p => p.texto.trim() || p.alts.some(a => a.trim()));
+  function actualizarPuntos() {
+    const c = calcPuntos(conTexto()), mal = c.dif !== 0;
+    ptsInputs.forEach(({ inp, p }) => { inp.placeholder = fmt(c.cada); inp.classList.toggle("fijo", Number(p.puntos) > 0); });
+    const nAl = Number(iMos.value) || 0, nPr = conTexto().length;
+    let msg = mal ? (c.dif < 0 ? `Faltan ${fmt(-c.dif)} puntos para llegar a 20.` : `Sobran ${fmt(c.dif)} puntos: el total pasa de 20.`)
+      : c.libres === nPr ? `Suma 20: cada pregunta vale ${fmt(c.cada)} (reparto automático).`
+      : c.libres ? `Suma 20: ${nPr - c.libres} con puntos propios y ${c.libres} automáticas de ${fmt(c.cada)}.` : "Suma 20.";
+    if (mal && c.libres) msg += " Las automáticas quedan en 0.";
+    if (nAl > 0 && nAl < nPr) msg += ` Cada alumno recibe ${nAl} de ${nPr}: su nota se ajusta a 20 con las que le toquen.`;
+    ptsBox.classList.toggle("mal", mal);
+    ptsTxt.replaceChildren(el("b", "", (mal ? "⚠ " : "✓ ") + fmt(c.total) + " / 20"), " · " + msg);
+    ptsChip.className = "pts-chip" + (mal ? " mal" : ""); ptsChip.textContent = (mal ? "⚠ " : "✓ ") + fmt(c.total) + "/20 pts";
+    return c;
+  }
 
   /* --- preguntas --- */
-  const hPreg = el("h2", "seccion", "4 · Preguntas");
+  const hPreg = el("h2", "seccion", "4 · Preguntas y puntos");
   const lista = el("div");
   const agregar = boton("+ Agregar pregunta", "ghost lg");
   agregar.onclick = () => { quiz.preguntas.push(vacia()); marcar(); pintarPreguntas(); lista.lastChild.querySelector("textarea").focus(); };
@@ -409,10 +590,10 @@ async function vistaEditor(id) {
     if (await eliminar(q)) { sucio = false; vistaLista(); }
   };
   const guardar = boton("Guardar quiz", "morado lg", "ok");
-  barra.append(cancelar, estadoTxt); if (quiz.id) barra.append(borrar); barra.append(guardar);
+  barra.append(cancelar, estadoTxt, ptsChip); if (quiz.id) barra.append(borrar); barra.append(guardar);
 
   function pintarPreguntas() {
-    lista.replaceChildren();
+    lista.replaceChildren(); ptsInputs.length = 0;
     quiz.preguntas.forEach((p, i) => {
       const box = el("div", "preg");
       const top = el("div", "preg-top");
@@ -425,9 +606,13 @@ async function vistaEditor(id) {
       baja.onclick = () => { [quiz.preguntas[i + 1], quiz.preguntas[i]] = [quiz.preguntas[i], quiz.preguntas[i + 1]]; marcar(); pintarPreguntas(); };
       const borra = ib("✕", "Quitar pregunta", "x");
       borra.onclick = () => { if (p.texto && !confirm("¿Quitar esta pregunta?")) return; quiz.preguntas.splice(i, 1); marcar(); pintarPreguntas(); };
-      top.append(el("span", "num", String(i + 1)), tema, sube, baja, borra);
+      const pts = el("input", "pts"); pts.type = "number"; pts.min = 0; pts.step = 0.5; pts.title = "Puntos de esta pregunta (vacío = automático)";
+      pts.value = Number(p.puntos) > 0 ? p.puntos : "";
+      pts.oninput = () => { p.puntos = pts.value === "" ? null : Number(pts.value); marcar(); actualizarPuntos(); };
+      ptsInputs.push({ inp: pts, p });
+      top.append(el("span", "num", String(i + 1)), tema, pts, el("span", "pts-lab", "pts"), sube, baja, borra);
       const tx = el("textarea"); tx.placeholder = "Escribe la pregunta…"; tx.value = p.texto;
-      tx.oninput = () => { p.texto = tx.value; marcar(); };
+      tx.oninput = () => { const antes = !!p.texto.trim(); p.texto = tx.value; marcar(); if (antes !== !!p.texto.trim()) actualizarPuntos(); };
       box.append(top, tx);
       p.alts.forEach((a, k) => {
         const fila = el("div", "alt" + (p.correcta === k ? " ok" : ""));
@@ -446,19 +631,23 @@ async function vistaEditor(id) {
       lista.appendChild(box);
     });
     estadoTxt.textContent = quiz.preguntas.length + " pregunta(s)" + (sucio ? " · sin guardar" : "");
+    actualizarPuntos();
   }
 
   guardar.onclick = async () => {
     const preguntas = quiz.preguntas.filter(p => p.texto.trim() || p.alts.some(a => a.trim()))
       .map(p => {   // quita alternativas vacías y reajusta el índice de la correcta
         const alts = [], idx = []; p.alts.forEach((a, k) => { if (a.trim()) { idx.push(k); alts.push(a.trim()); } });
-        return { id: p.id, tema: p.tema, texto: p.texto.trim(), alts, correcta: idx.indexOf(p.correcta) };
+        return { id: p.id, tema: p.tema, texto: p.texto.trim(), alts, correcta: idx.indexOf(p.correcta), puntos: Number(p.puntos) > 0 ? Number(p.puntos) : null };
       });
+    const c = actualizarPuntos();
+    if (c.dif !== 0 && !(await confirmar({ titulo: `Los puntos suman ${fmt(c.total)}, no 20`, ok: "Guardar así",
+      texto: (c.dif < 0 ? `Faltan ${fmt(-c.dif)}` : `Sobran ${fmt(c.dif)}`) + " puntos. Si guardas así, la nota igual se ajusta a 20 (cada punto vale " + fmt(20 / c.total) + ")." }))) return;
     const titulo = iTit.value.trim() || (tipo === "ec" ? iTit.placeholder : "");
     guardar.disabled = true; estadoTxt.textContent = "Guardando…";
     try {
       const datosQuiz = { id: quiz.id, titulo, clase: claseActual(), mostrar: Number(iMos.value) || 0,
-        oculto: estado === "oculto", abierto: estado === "abierto", repetir: oRep.checked, puntaje: oPun.checked, errores: oErr.checked, preguntas };
+        oculto: estado === "oculto", abierto: estado === "abierto", repetir: oRep.checked, puntaje: oPun.checked, errores: oErr.checked, penalizar: oPen.checked, preguntas };
       const r = await Aula.api("quizGuardar", { quiz: datosQuiz });
       const nuevo = !quiz.id;
       Object.assign(quiz, datosQuiz, { id: r.id }); iTit.value = titulo; sucio = false; olvidar();
@@ -472,7 +661,7 @@ async function vistaEditor(id) {
   // "sin guardar" en la barra al primer cambio
   app.oninput = () => { if (sucio && !/sin guardar/.test(estadoTxt.textContent)) estadoTxt.textContent = quiz.preguntas.length + " pregunta(s) · sin guardar"; };
 
-  app.replaceChildren(top, cTipo, cDatos, cOpc, hPreg, imp, lista, agregar, barra);
+  app.replaceChildren(top, cTipo, cDatos, cOpc, hPreg, imp, ptsBox, lista, agregar, barra);
   pintarDestino();
   pintarPreguntas();
 }
